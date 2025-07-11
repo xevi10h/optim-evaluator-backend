@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { validateEvaluation } from '../middleware/validation';
 import logger from '../utils/logger';
 import { AppError } from '../utils/errors';
+import { generatePDFResponse } from '../utils/advancedPdfGenerator';
 import {
 	FileContent,
 	EvaluationCriteria,
@@ -22,47 +23,70 @@ async function extractEvaluationCriteria(
 	const specsContent = specifications
 		.map(
 			(spec) => `
-    === DOCUMENTO: ${spec.name} ===
+    === DOCUMENT: ${spec.name} ===
     ${spec.content}
   `,
 		)
 		.join('\n\n');
 
 	const prompt = `
-    Analitza els següents documents d'especificacions de licitació i extreu ÚNICAMENT els criteris SUBJECTIUS que requereixen avaluació qualitativa.
+    Ets un expert en avaluació de licitacions públiques. Analitza els següents documents d'especificacions per identificar NOMÉS els criteris SUBJECTIUS de valoració que siguin avaluables de manera final.
 
     DOCUMENTS D'ESPECIFICACIONS:
     ${specsContent}
 
-    INSTRUCCIONS:
-    1. Identifica només criteris que requereixen avaluació subjectiva/qualitativa
-    2. Exclou requisits tècnics objectius (com "ha de tenir certificació X")
-    3. Inclou aspectes com: experiència, metodologia, qualitat, innovació, organització, etc.
-    4. Cada criteri ha de ser avaluable en termes de qualitat/adequació
-    5. Màxim 8 criteris per mantenir l'avaluació manejable
+    FLUX D'ANÀLISI A SEGUIR:
+    1. LOCALITZA primer els apartats clau:
+       - "Quadre de característiques"
+       - "Criteris de valoració"
+       - "Criteris d'adjudicació" 
+       - "Criteris de puntuació"
+       - "Ponderació de l'oferta"
+       - "Mètode d'avaluació"
+
+    2. IDENTIFICA només criteris que siguin:
+       ✓ Subjectius (requereixen judici de valor)
+       ✓ Avaluables segons criteris qualitatius
+       ✓ No automàtics (no són càlculs matemàtics)
+       ✓ Específics i finals (no categories generals)
+       
+    3. EXCLOU criteris que siguin:
+       ✗ Objectius (certificacions, títols, anys d'experiència específics)
+       ✗ Automàtics (preu més baix, puntuació per descompte)
+       ✗ Requisits mínims obligatoris
+       ✓ Criteris "pare" o contenidors: No incloguis títols generals (com "Memòria Tècnica", "Proposta Tècnica", "Documentació Sobre A") que simplement agrupen altres sub-criteris més detallats. Centra't en els criteris avaluables que tenen la seva pròpia descripció de puntuació.
+
+    4. DISCERNIR LA JERARQUIA: Abans de donar la resposta final, revisa la teva llista. Si un criteri que has extret (p. ex., "Memòria Tècnica") serveix només com a títol per a altres criteris més específics (p. ex., "Metodologia del projecte" i "Planificació de tasques"), elimina el criteri general i conserva només els específics. Extreu l'element més detallat de l'avaluació.
+
+    CRITERIS SUBJECTIUS TÍPICS A BUSCAR:
+    - Adequació metodològica de la proposta
+    - Qualitat tècnica de la solució proposada
+    - Experiència i capacitat de l'equip tècnic
+    - Organització i planificació del projecte
+    - Valor afegit i innovació
+    - Mesures de sostenibilitat ambiental
+    - Adequació dels recursos humans
+    - Millores sobre els requisits mínims
+
+    IMPORTANT: La valoració sempre s'ha de fer en base a si l'oferta respon adequadament al que es demana en el plec tècnic.
 
     FORMAT DE RESPOSTA:
-    Respon NOMÉS amb una llista JSON de strings, sense explicacions addicionals:
-    ["Criteri 1", "Criteri 2", "Criteri 3", ...]
+    Respon NOMÉS amb un array JSON de strings, sense explicacions:
+    ["Criteri subjectiu 1", "Criteri subjectiu 2", ...]
 
-    EXEMPLE:
-    ["Experiència i capacitat tècnica de l'equip", "Metodologia i planificació del projecte", "Qualitat de la proposta tècnica", "Innovació i valor afegit"]
+    Màxim 8 criteris per mantenir l'avaluació manejable i efectiva.
   `;
 
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.3,
+			temperature: 0.2,
 		};
 
 		const contents = [
 			{
 				role: 'user' as const,
-				parts: [
-					{
-						text: prompt,
-					},
-				],
+				parts: [{ text: prompt }],
 			},
 		];
 
@@ -123,7 +147,7 @@ async function evaluateCriterion(
 	const specsContent = specifications
 		.map(
 			(spec) => `
-    === ESPECIFICACIÓ: ${spec.name} ===
+    === PLEC/ESPECIFICACIÓ: ${spec.name} ===
     ${spec.content}
   `,
 		)
@@ -132,46 +156,68 @@ async function evaluateCriterion(
 	const proposalContent = proposals
 		.map(
 			(proposal) => `
-    === PROPOSTA: ${proposal.name} ===
+    === OFERTA: ${proposal.name} ===
     ${proposal.content}
   `,
 		)
 		.join('\n\n');
 
 	const prompt = `
-    Avalua el següent criteri basant-te en les especificacions de la licitació i la proposta presentada.
+    Ets un expert tècnic en avaluació de licitacions. Avalua rigorosament el següent criteri subjectiu.
 
-    CRITERI A AVALUAR: ${criterion}
+    CRITERI A AVALUAR: "${criterion}"
 
-    ESPECIFICACIONS DE LA LICITACIÓ:
+    DOCUMENTACIÓ DE LICITACIÓ (Plecs):
     ${specsContent}
 
-    PROPOSTA A AVALUAR:
+    OFERTA A AVALUAR:
     ${proposalContent}
 
-    INSTRUCCIONS PER A L'AVALUACIÓ:
-    1. Analitza què es requereix segons les especificacions per a aquest criteri
-    2. Avalua com compleix la proposta amb aquests requisits
-    3. Assigna una d'aquestes qualificacions:
-       - INSUFICIENT: No compleix requisits mínims
-       - REGULAR: Compleix parcialment els requisits
-       - COMPLEIX_EXITOSAMENT: Supera les expectatives
+    METODOLOGIA D'AVALUACIÓ:
     
-    4. Proporciona una justificació detallada (mínim 100 paraules)
-    5. Identifica 2-4 punts forts específics
-    6. Identifica 2-4 àrees de millora específiques
-    7. Referencia seccions específiques de les especificacions
+    1. ANÀLISI DEL REQUERIMENT:
+       - Què especifica exactament el plec per aquest criteri?
+       - Quins són els requisits mínims i les expectatives?
+       - Hi ha indicadors específics de qualitat mencionats?
 
-    FORMAT DE RESPOSTA (JSON):
+    2. AVALUACIÓ DE L'OFERTA:
+       - Com respon l'oferta a aquests requeriments?
+       - Supera els mínims exigits?
+       - Aporta valor afegit o innovació?
+       - És coherent amb el què es demana?
+
+    3. ESCALA DE PUNTUACIÓ:
+       - INSUFICIENT: No compleix requisits mínims del plec o resposta inadequada
+       - REGULAR: Compleix requisits mínims però sense destacar
+       - COMPLEIX_EXITOSAMENT: Supera expectatives i aporta valor afegit
+
+    4. JUSTIFICACIÓ DETALLADA (mínim 150 paraules):
+       - Explica clarament per què aquesta puntuació
+       - Referencia seccions específiques del plec i de l'oferta
+       - Sigues concret i objectiu en l'argumentació
+
+    5. PUNTS FORTS (3-5 elements específics):
+       - Aspectes que destaquen positivament
+       - Valoracions concretes, no genèriques
+
+    6. ÀREES DE MILLORA (2-4 elements específics):
+       - Aspectes que podrien millorar-se
+       - Suggeriments constructius
+
+    7. REFERÈNCIES (2-3 elements):
+       - Seccions específiques del plec consultades
+       - Parts de l'oferta analitzades
+
+    FORMAT DE RESPOSTA (JSON estricte):
     {
       "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
-      "justification": "Justificació detallada d'almenys 100 paraules...",
-      "strengths": ["Punt fort 1", "Punt fort 2", "Punt fort 3"],
-      "improvements": ["Millora 1", "Millora 2", "Millora 3"],
-      "references": ["Referència 1", "Referència 2"]
+      "justification": "Justificació detallada d'almenys 150 paraules que expliqui clarament els motius de la puntuació assignada...",
+      "strengths": ["Punt fort específic 1", "Punt fort específic 2", "Punt fort específic 3"],
+      "improvements": ["Millora específica 1", "Millora específica 2"],
+      "references": ["Secció X del plec", "Apartat Y de l'oferta", "Punt Z de les especificacions"]
     }
 
-    Respon NOMÉS amb el JSON, sense text addicional.
+    Sigues rigorós, objectiu i sempre justifica adequadament la puntuació assignada.
   `;
 
 	try {
@@ -183,11 +229,7 @@ async function evaluateCriterion(
 		const contents = [
 			{
 				role: 'user' as const,
-				parts: [
-					{
-						text: prompt,
-					},
-				],
+				parts: [{ text: prompt }],
 			},
 		];
 
@@ -242,43 +284,74 @@ async function generateExecutiveSummary(
 	const criteriaResults = criteria
 		.map(
 			(c) => `
-    - ${c.criterion}: ${c.score}
-    ${c.justification}
+    CRITERI: ${c.criterion}
+    PUNTUACIÓ: ${c.score}
+    JUSTIFICACIÓ: ${c.justification}
+    PUNTS FORTS: ${c.strengths.join(', ')}
+    MILLORES: ${c.improvements.join(', ')}
   `,
 		)
-		.join('\n');
+		.join('\n---\n');
+
+	const totalCriteria = criteria.length;
+	const excellentScores = criteria.filter(
+		(c) => c.score === 'COMPLEIX_EXITOSAMENT',
+	).length;
+	const regularScores = criteria.filter((c) => c.score === 'REGULAR').length;
+	const insufficientScores = criteria.filter(
+		(c) => c.score === 'INSUFICIENT',
+	).length;
 
 	const prompt = `
-    Basant-te en els següents resultats d'avaluació, genera un resum executiu i una recomanació final.
+    Ets un expert en avaluació de licitacions públiques. Genera un informe executiu professional basat en l'avaluació realitzada.
 
-    RESULTATS D'AVALUACIÓ:
+    RESULTATS DE L'AVALUACIÓ:
     ${criteriaResults}
 
-    ESPECIFICACIONS DE LA LICITACIÓ:
-    ${specifications
-			.map((spec) => `${spec.name}: ${spec.content.substring(0, 1000)}...`)
-			.join('\n')}
+    RESUM QUANTITATIU:
+    - Total criteris avaluats: ${totalCriteria}
+    - Compleix exitosament: ${excellentScores}
+    - Regular: ${regularScores}  
+    - Insuficient: ${insufficientScores}
 
-    PROPOSTA AVALUADA:
-    ${proposals
-			.map((prop) => `${prop.name}: ${prop.content.substring(0, 1000)}...`)
-			.join('\n')}
+    DOCUMENTACIÓ DE REFERÈNCIA:
+    Plecs: ${specifications.map((spec) => spec.name).join(', ')}
+    Ofertes: ${proposals.map((prop) => prop.name).join(', ')}
 
-    INSTRUCCIONS:
-    1. Crea un resum executiu de 2-3 paràgrafs que sintetitzi les troballes principals
-    2. Proporciona una recomanació final clara i justificada
-    3. Assigna un nivell de confiança (0.0 a 1.0) basat en la claredat de la documentació
-    4. Mantén un to professional i objectiu
-    5. Respon en català
+    INSTRUCCIONS PER L'INFORME:
+
+    1. RESUM EXECUTIU (3-4 paràgrafs professionals):
+       - Síntesi dels resultats principals
+       - Punts forts globals de l'oferta
+       - Àrees de preocupació o millora
+       - Avaluació general de la qualitat de la proposta
+
+    2. RECOMANACIÓ FINAL:
+       - Clara i justificada
+       - Basada en l'anàlisi dels criteris
+       - Incloure possibles condicions o recomanacions
+
+    3. NIVELL DE CONFIANÇA (0.0 a 1.0):
+       - Basat en la claredat de la documentació
+       - Completesa de la informació disponible
+       - Qualitat de les respostes de l'oferta
+
+    CRITERIS PER LA RECOMANACIÓ:
+    - Si 70%+ criteris són "COMPLEIX_EXITOSAMENT": Recomanació positiva
+    - Si majoria "REGULAR" amb alguns "COMPLEIX_EXITOSAMENT": Recomanació amb reserves
+    - Si hi ha criteris "INSUFICIENT": Avaluar si són crítics per la funcionalitat
+
+    TO: Professional i objectiu, adequat per a un informe tècnic oficial.
+    IDIOMA: Català
 
     FORMAT DE RESPOSTA (JSON):
     {
-      "summary": "Resum executiu de 2-3 paràgrafs...",
+      "summary": "Resum executiu professional de 3-4 paràgrafs...",
       "recommendation": "Recomanació final clara i justificada...",
       "confidence": 0.85
     }
 
-    Respon NOMÉS amb el JSON, sense text addicional.
+    Mantén sempre un to professional i objectiu adequat per a la documentació oficial d'una licitació pública.
   `;
 
 	try {
@@ -290,11 +363,7 @@ async function generateExecutiveSummary(
 		const contents = [
 			{
 				role: 'user' as const,
-				parts: [
-					{
-						text: prompt,
-					},
-				],
+				parts: [{ text: prompt }],
 			},
 		];
 
@@ -352,6 +421,7 @@ async function generateExecutiveSummary(
 	}
 }
 
+// Main evaluation endpoint
 router.post('/', validateEvaluation, async (req, res, next) => {
 	try {
 		if (!process.env.GEMINI_API_KEY) {
@@ -374,9 +444,7 @@ router.post('/', validateEvaluation, async (req, res, next) => {
 
 		logger.info('🚀 Iniciando evaluación automática...');
 
-		logger.info('📋 Extrayendo criterios de evaluación...');
 		const extractedCriteria = await extractEvaluationCriteria(specifications);
-
 		if (extractedCriteria.length === 0) {
 			throw new AppError(
 				'No se han podido extraer criterios de evaluación de las especificaciones',
@@ -388,9 +456,7 @@ router.post('/', validateEvaluation, async (req, res, next) => {
 			`✅ Extraídos ${extractedCriteria.length} criterios de evaluación`,
 		);
 
-		logger.info(`🔄 Evaluando ${extractedCriteria.length} criterios...`);
 		const criteriaEvaluations: EvaluationCriteria[] = [];
-
 		for (const criterion of extractedCriteria) {
 			const evaluation = await evaluateCriterion(
 				criterion,
@@ -417,8 +483,144 @@ router.post('/', validateEvaluation, async (req, res, next) => {
 		};
 
 		logger.info('✅ Evaluación completada exitosamente');
-
 		res.json(result);
+	} catch (error) {
+		next(error);
+	}
+});
+
+// Enhanced PDF generation endpoint
+router.post('/pdf', validateEvaluation, async (req, res, next) => {
+	try {
+		if (!process.env.GEMINI_API_KEY) {
+			throw new AppError('Clave del sistema no configurada', 500);
+		}
+
+		const {
+			specifications,
+			proposals,
+			tenderTitle = 'Licitació sense títol especificat',
+			logoUrl,
+		}: EvaluationRequest & {
+			tenderTitle?: string;
+			logoUrl?: string;
+		} = req.body;
+
+		if (
+			!specifications ||
+			!Array.isArray(specifications) ||
+			specifications.length === 0
+		) {
+			throw new AppError('Se requieren documentos de especificaciones', 400);
+		}
+
+		if (!proposals || !Array.isArray(proposals) || proposals.length === 0) {
+			throw new AppError('Se requieren documentos de propuesta', 400);
+		}
+
+		logger.info('🚀 Iniciando evaluación para generación de PDF...');
+
+		// Perform the same evaluation process
+		const extractedCriteria = await extractEvaluationCriteria(specifications);
+		if (extractedCriteria.length === 0) {
+			throw new AppError(
+				'No se han podido extraer criterios de evaluación de las especificaciones',
+				400,
+			);
+		}
+
+		logger.info(`✅ Extraídos ${extractedCriteria.length} criterios para PDF`);
+
+		const criteriaEvaluations: EvaluationCriteria[] = [];
+		for (const criterion of extractedCriteria) {
+			const evaluation = await evaluateCriterion(
+				criterion,
+				specifications,
+				proposals,
+			);
+			criteriaEvaluations.push(evaluation);
+		}
+
+		const { summary, recommendation, confidence } =
+			await generateExecutiveSummary(
+				criteriaEvaluations,
+				specifications,
+				proposals,
+			);
+
+		const evaluationResult: EvaluationResult = {
+			summary,
+			criteria: criteriaEvaluations,
+			recommendation,
+			confidence,
+			extractedCriteria,
+		};
+
+		// Generate PDF
+		const proposalName = proposals.map((p) => p.name).join(', ');
+		const { buffer, filename, contentType, size } = await generatePDFResponse(
+			evaluationResult,
+			{
+				tenderTitle,
+				proposalName,
+				logoUrl,
+			},
+		);
+
+		// Set headers for PDF download
+		res.setHeader('Content-Type', contentType);
+		res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+		res.setHeader('Content-Length', size);
+
+		// Send the PDF buffer
+		res.send(buffer);
+
+		logger.info(
+			`✅ PDF "${filename}" generado y enviado exitosamente (${size} bytes)`,
+		);
+	} catch (error) {
+		logger.error('❌ Error en generación de PDF:', error);
+		next(error);
+	}
+});
+
+// Endpoint to get evaluation criteria only (useful for preview)
+router.post('/criteria', validateEvaluation, async (req, res, next) => {
+	try {
+		if (!process.env.GEMINI_API_KEY) {
+			throw new AppError('Clave del sistema no configurada', 500);
+		}
+
+		const { specifications }: { specifications: FileContent[] } = req.body;
+
+		if (
+			!specifications ||
+			!Array.isArray(specifications) ||
+			specifications.length === 0
+		) {
+			throw new AppError('Se requieren documentos de especificaciones', 400);
+		}
+
+		logger.info('🔍 Extrayendo criterios para preview...');
+
+		const extractedCriteria = await extractEvaluationCriteria(specifications);
+
+		if (extractedCriteria.length === 0) {
+			throw new AppError(
+				'No se han podido extraer criterios de evaluación de las especificaciones',
+				400,
+			);
+		}
+
+		logger.info(
+			`✅ Extraídos ${extractedCriteria.length} criterios para preview`,
+		);
+
+		res.json({
+			success: true,
+			criteria: extractedCriteria,
+			count: extractedCriteria.length,
+		});
 	} catch (error) {
 		next(error);
 	}

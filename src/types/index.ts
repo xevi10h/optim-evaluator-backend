@@ -45,10 +45,52 @@ export interface EvaluationRequest {
 	proposals: FileContent[];
 }
 
+export interface EvaluationPDFRequest extends EvaluationRequest {
+	tenderTitle?: string;
+	logoUrl?: string;
+	companyInfo?: {
+		name: string;
+		website: string;
+		address: string;
+		city: string;
+		taxId: string;
+		phone: string;
+	};
+}
+
+export interface CriteriaExtractionRequest {
+	specifications: FileContent[];
+}
+
+export interface CriteriaExtractionResponse {
+	success: boolean;
+	criteria: string[];
+	count: number;
+}
+
 export interface APIError {
 	message: string;
 	status: number;
 	code?: string;
+}
+
+export interface PDFGenerationConfig {
+	headerImageUrl?: string;
+	companyInfo: {
+		name: string;
+		website: string;
+		address: string;
+		city: string;
+		taxId: string;
+		phone: string;
+	};
+}
+
+export interface PDFGenerationResult {
+	buffer: Buffer;
+	filename: string;
+	contentType: string;
+	size: number;
 }
 
 export const SUPPORTED_FILE_TYPES = [
@@ -64,5 +106,34 @@ export const EVALUATION_SCORES = {
 	COMPLEIX_EXITOSAMENT: 'COMPLEIX_EXITOSAMENT',
 } as const;
 
+export const SCORE_VALUES = {
+	INSUFICIENT: 1,
+	REGULAR: 2,
+	COMPLEIX_EXITOSAMENT: 3,
+} as const;
+
+export const RECOMMENDATION_TYPES = {
+	POSITIVE: 'positive',
+	CONDITIONAL: 'conditional',
+	NEGATIVE: 'negative',
+} as const;
+
 export type SupportedFileType = (typeof SUPPORTED_FILE_TYPES)[number];
 export type EvaluationScore = keyof typeof EVALUATION_SCORES;
+export type RecommendationType = keyof typeof RECOMMENDATION_TYPES;
+
+export interface ScoreStatistics {
+	total: number;
+	excellent: number;
+	regular: number;
+	insufficient: number;
+	averageScore: number;
+	recommendationType: RecommendationType;
+}
+
+export interface ValidationSchemas {
+	uploadSchema: any;
+	evaluationSchema: any;
+	criteriaExtractionSchema: any;
+	pdfGenerationSchema: any;
+}
