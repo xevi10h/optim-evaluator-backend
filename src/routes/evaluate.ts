@@ -3,7 +3,6 @@ import { GoogleGenAI } from '@google/genai';
 import { validateEvaluation } from '../middleware/validation';
 import logger from '../utils/logger';
 import { AppError } from '../utils/errors';
-import { generatePDFResponse } from '../utils/advancedPdfGenerator';
 import {
 	FileContent,
 	EvaluationCriteria,
@@ -485,101 +484,6 @@ router.post('/', validateEvaluation, async (req, res, next) => {
 		logger.info('✅ Evaluación completada exitosamente');
 		res.json(result);
 	} catch (error) {
-		next(error);
-	}
-});
-
-// Enhanced PDF generation endpoint
-router.post('/pdf', validateEvaluation, async (req, res, next) => {
-	try {
-		if (!process.env.GEMINI_API_KEY) {
-			throw new AppError('Clave del sistema no configurada', 500);
-		}
-
-		const {
-			specifications,
-			proposals,
-			tenderTitle = 'Licitació sense títol especificat',
-			logoUrl,
-		}: EvaluationRequest & {
-			tenderTitle?: string;
-			logoUrl?: string;
-		} = req.body;
-
-		if (
-			!specifications ||
-			!Array.isArray(specifications) ||
-			specifications.length === 0
-		) {
-			throw new AppError('Se requieren documentos de especificaciones', 400);
-		}
-
-		if (!proposals || !Array.isArray(proposals) || proposals.length === 0) {
-			throw new AppError('Se requieren documentos de propuesta', 400);
-		}
-
-		logger.info('🚀 Iniciando evaluación para generación de PDF...');
-
-		// Perform the same evaluation process
-		const extractedCriteria = await extractEvaluationCriteria(specifications);
-		if (extractedCriteria.length === 0) {
-			throw new AppError(
-				'No se han podido extraer criterios de evaluación de las especificaciones',
-				400,
-			);
-		}
-
-		logger.info(`✅ Extraídos ${extractedCriteria.length} criterios para PDF`);
-
-		const criteriaEvaluations: EvaluationCriteria[] = [];
-		for (const criterion of extractedCriteria) {
-			const evaluation = await evaluateCriterion(
-				criterion,
-				specifications,
-				proposals,
-			);
-			criteriaEvaluations.push(evaluation);
-		}
-
-		const { summary, recommendation, confidence } =
-			await generateExecutiveSummary(
-				criteriaEvaluations,
-				specifications,
-				proposals,
-			);
-
-		const evaluationResult: EvaluationResult = {
-			summary,
-			criteria: criteriaEvaluations,
-			recommendation,
-			confidence,
-			extractedCriteria,
-		};
-
-		// Generate PDF
-		const proposalName = proposals.map((p) => p.name).join(', ');
-		const { buffer, filename, contentType, size } = await generatePDFResponse(
-			evaluationResult,
-			{
-				tenderTitle,
-				proposalName,
-				logoUrl,
-			},
-		);
-
-		// Set headers for PDF download
-		res.setHeader('Content-Type', contentType);
-		res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-		res.setHeader('Content-Length', size);
-
-		// Send the PDF buffer
-		res.send(buffer);
-
-		logger.info(
-			`✅ PDF "${filename}" generado y enviado exitosamente (${size} bytes)`,
-		);
-	} catch (error) {
-		logger.error('❌ Error en generación de PDF:', error);
 		next(error);
 	}
 });
