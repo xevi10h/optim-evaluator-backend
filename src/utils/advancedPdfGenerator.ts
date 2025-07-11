@@ -1,7 +1,7 @@
 import puppeteer from 'puppeteer';
 import { EvaluationResult } from '../types';
 import logger from './logger';
-import { OPTIMPEOPLE_LOGO_BASE64 } from './logo';
+import { OPTIMPEOPLE_LOGO_BASE64 } from '../images/logo';
 
 interface PDFGenerationOptions {
 	tenderTitle: string;
