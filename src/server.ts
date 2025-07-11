@@ -6,7 +6,6 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
 import uploadRoutes from './routes/upload';
-import evaluateRoutes from './routes/evaluate';
 import extractLotsRoutes from './routes/extractLots';
 import evaluateLotsRoutes from './routes/evaluateLots';
 import logger from './utils/logger';
@@ -66,7 +65,6 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/upload', uploadRoutes);
-app.use('/api/evaluate', evaluateRoutes); // Legacy single-lot evaluation
 app.use('/api/extract-lots', extractLotsRoutes);
 app.use('/api/evaluate-lots', evaluateLotsRoutes);
 

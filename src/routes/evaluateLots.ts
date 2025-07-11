@@ -127,7 +127,7 @@ async function evaluateLotCriterion(
 		.join('\n\n');
 
 	const prompt = `
-    Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lote ${lot.lotNumber}).
+    Ets un expert tècnic en avaluació de licitacions amb estàndards d'avaluació rigorosos. Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lote ${lot.lotNumber}) amb criteris estrictes però justos.
 
     ESPECIFICACIONS:
     ${specsContent}
@@ -140,17 +140,27 @@ async function evaluateLotCriterion(
     - Títol: ${lot.title}
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
-    INSTRUCCIONS:
+    INSTRUCCIONS D'AVALUACIÓ RIGOROSA:
     1. Centra't específicament en aquest lote i criteri
     2. Analitza com la proposta respon als requeriments d'aquest lote
-    3. Usa l'escala: INSUFICIENT, REGULAR, COMPLEIX_EXITOSAMENT
+    3. Usa l'escala amb criteris estrictes: 
+       - INSUFICIENT: No compleix requisits mínims o resposta inadequada
+       - REGULAR: Compleix requisits mínims de manera adequada però estàndard
+       - COMPLEIX_EXITOSAMENT: **NOMÉS** quan supera clarament expectatives, aporta valor excepcional i demostra expertesa superior
     4. Proporciona justificació detallada (mínim 150 paraules)
+    5. Sigues conservador amb puntuacions altes - "COMPLEIX_EXITOSAMENT" ha de ser realment excepcional
+
+    CRITERIS ESTRICTES PER "COMPLEIX_EXITOSAMENT":
+    - Demostra comprensió excepcional dels requeriments específics del lote
+    - Aporta solucions innovadores o especialment ben fonamentades
+    - Proporciona detalls concrets que mostren expertesa superior
+    - Supera clarament les expectatives mínimes
 
 	IDIOMA DE LA RESPOSTA: Català (sempre en català).
     FORMAT DE RESPOSTA (JSON):
     {
       "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
-      "justification": "Justificació detallada...",
+      "justification": "Justificació detallada amb criteris rigorosos...",
       "strengths": ["Punt fort 1", "Punt fort 2"],
       "improvements": ["Millora 1", "Millora 2"],
       "references": ["Referència 1", "Referència 2"]
@@ -160,7 +170,7 @@ async function evaluateLotCriterion(
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.3,
+			temperature: 0.1, // Reducida para mayor rigor
 		};
 
 		const contents = [
@@ -219,7 +229,7 @@ async function generateLotSummary(
 	if (!hasProposal) {
 		return {
 			summary: `No s'ha presentat proposta per al lote ${lot.lotNumber}: ${lot.title}`,
-			recommendation: `Aquest lote no pot ser adjudicat ja que no s'ha rebut cap proposta.`,
+			recommendation: `Aquest lote no ha rebut cap proposta, pel que no es pot procedir amb l'avaluació. Cal considerar les següents preguntes: ¿Convé relicitar aquest lote específic? ¿Els requisits són adequats per al mercat? ¿Hi ha barreres d'entrada que cal revisar?`,
 			confidence: 1.0,
 		};
 	}
@@ -243,7 +253,7 @@ async function generateLotSummary(
 	).length;
 
 	const prompt = `
-    Genera un resum i recomanació per al lote ${lot.lotNumber}: ${lot.title}.
+    Genera un resum i recomanació analítica per al lote ${lot.lotNumber}: ${lot.title}.
 
     RESULTATS:
     ${criteriaResults}
@@ -253,11 +263,24 @@ async function generateLotSummary(
     - Regular: ${regularScores}
     - Insuficient: ${insufficientScores}
 
+    INSTRUCCIONS:
+    1. RESUM: Síntesi professional del rendiment d'aquest lote
+    2. RECOMANACIÓ ANALÍTICA (NO decisiva):
+       - Identifica els aspectes més destacables de la proposta per aquest lote
+       - Assenyala les àrees que requereixen atenció o aclariment
+       - Planteja preguntes clau específiques per aquest lote:
+         * Sobre l'adequació tècnica de la solució proposada
+         * Sobre la viabilitat de la implementació per aquest lote específic
+         * Sobre el valor real que aporta aquesta proposta al lote
+         * Sobre possibles riscos o consideracions especials
+       - NO facis recomanacions directives de contractació
+       - Proporciona elements per a l'anàlisi interna de l'equip
+
 	IDIOMA DE LA RESPOSTA: Català (sempre en català).
     FORMAT DE RESPOSTA (JSON):
     {
       "summary": "Resum professional del rendiment d'aquest lote...",
-      "recommendation": "Recomanació específica per aquest lote...",
+      "recommendation": "Anàlisi dels punts forts, àrees d'atenció i preguntes clau per a la reflexió sobre aquest lote específic...",
       "confidence": 0.85
     }
   `;
@@ -265,7 +288,7 @@ async function generateLotSummary(
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.3,
+			temperature: 0.2,
 		};
 
 		const contents = [
@@ -317,127 +340,8 @@ async function generateLotSummary(
 
 		return {
 			summary: `El lote ${lot.lotNumber} ha estat evaluat segons ${criteria.length} criteris. Els resultats mostren un rendiment ${averageScore >= 2.5 ? 'satisfactori' : 'que requereix millores'}.`,
-			recommendation:
-				averageScore >= 2.5
-					? `Es recomana considerar aquest lote per a adjudicació.`
-					: `Es recomana sol·licitar aclariments abans de l'adjudicació d'aquest lote.`,
+			recommendation: `Cal analitzar internament si aquesta proposta s'adequa als objectius específics del lote ${lot.lotNumber}. Es recomana revisar els aspectes destacats i considerar les àrees que necessiten atenció.`,
 			confidence: 0.75,
-		};
-	}
-}
-
-async function generateOverallSummary(
-	lots: LotEvaluation[],
-): Promise<{ summary: string; recommendation: string; confidence: number }> {
-	const lotsWithProposals = lots.filter((lot) => lot.hasProposal);
-	const lotsWithoutProposals = lots.filter((lot) => !lot.hasProposal);
-
-	if (lotsWithProposals.length === 0) {
-		return {
-			summary: "No s'han rebut propostes per cap dels lotes de la licitació.",
-			recommendation:
-				'Es recomana declarar la licitació deserta i iniciar un nou procés.',
-			confidence: 1.0,
-		};
-	}
-
-	const lotSummaries = lotsWithProposals
-		.map(
-			(lot) => `
-    LOTE ${lot.lotNumber}: ${lot.lotTitle}
-    Criteris avaluats: ${lot.criteria.length}
-    Resum: ${lot.summary}
-    Recomanació: ${lot.recommendation}
-  `,
-		)
-		.join('\n---\n');
-
-	const prompt = `
-    Genera un resum general i recomanació final per a una licitació amb múltiples lotes.
-
-    LOTES AVALUATS:
-    ${lotSummaries}
-
-    ${
-			lotsWithoutProposals.length > 0
-				? `
-    LOTES SENSE PROPOSTA:
-    ${lotsWithoutProposals.map((lot) => `- Lote ${lot.lotNumber}: ${lot.lotTitle}`).join('\n')}
-    `
-				: ''
-		}
-
-    ESTADÍSTIQUES GENERALS:
-    - Total lotes: ${lots.length}
-    - Lotes amb proposta: ${lotsWithProposals.length}
-    - Lotes sense proposta: ${lotsWithoutProposals.length}
-
-    INSTRUCCIONS:
-    1. Proporciona un resum executiu global
-    2. Analitza el rendiment general de la proposta
-    3. Dona una recomanació final considerant tots els lotes
-    4. Tingues en compte els lotes sense proposta
-
-	IDIOMA DE LA RESPOSTA: Català (sempre en català).
-    FORMAT DE RESPOSTA (JSON):
-    {
-      "summary": "Resum executiu general de la licitació...",
-      "recommendation": "Recomanació final per a la licitació completa...",
-      "confidence": 0.85
-    }
-  `;
-
-	try {
-		const config = {
-			responseMimeType: 'application/json',
-			temperature: 0.3,
-		};
-
-		const contents = [
-			{
-				role: 'user' as const,
-				parts: [{ text: prompt }],
-			},
-		];
-
-		const response = await ai.models.generateContent({
-			model: 'gemini-2.0-flash-lite',
-			config,
-			contents,
-		});
-
-		if (!response?.text) {
-			throw new Error('No overall summary received');
-		}
-
-		const jsonMatch = response.text.match(/\{[\s\S]*\}/);
-		if (jsonMatch) {
-			const summary = JSON.parse(jsonMatch[0]);
-			return {
-				summary: summary.summary,
-				recommendation: summary.recommendation,
-				confidence: summary.confidence,
-			};
-		} else {
-			throw new Error('Could not extract JSON from response');
-		}
-	} catch (error) {
-		logger.error('Error generating overall summary:', error);
-
-		const totalWithProposals = lotsWithProposals.length;
-		const avgConfidence =
-			lotsWithProposals.length > 0
-				? lotsWithProposals.reduce((sum, lot) => sum + lot.confidence, 0) /
-					lotsWithProposals.length
-				: 0;
-
-		return {
-			summary: `La licitació inclou ${lots.length} lote(s), dels quals ${totalWithProposals} han rebut proposta. L'avaluació mostra resultats ${avgConfidence >= 0.7 ? 'satisfactoris' : 'que requereixen atenció'} en els lotes presentats.`,
-			recommendation:
-				totalWithProposals > 0
-					? `Es recomana procedir amb l'adjudicació dels lotes amb proposta i considerar relicitar els lotes sense proposta.`
-					: `Es recomana declarar la licitació deserta.`,
-			confidence: avgConfidence,
 		};
 	}
 }
@@ -481,14 +385,17 @@ router.post('/', async (req, res, next) => {
 
 			if (!hasProposal) {
 				logger.info(`⚠️ No proposal found for lot ${lot.lotNumber}`);
+				const { summary, recommendation, confidence } =
+					await generateLotSummary(lot, [], false);
+
 				lotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
 					hasProposal: false,
 					criteria: [],
-					summary: `No s'ha presentat proposta per al lote ${lot.lotNumber}`,
-					recommendation: `Aquest lote no pot ser adjudicat ja que no s'ha rebut cap proposta.`,
-					confidence: 1.0,
+					summary,
+					recommendation,
+					confidence,
 				});
 				continue;
 			}
@@ -504,7 +411,7 @@ router.post('/', async (req, res, next) => {
 					hasProposal: true,
 					criteria: [],
 					summary: `No s'han pogut extraure criteris d'avaluació per al lote ${lot.lotNumber}`,
-					recommendation: `Es requereix revisió manual dels criteris d'avaluació.`,
+					recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: ¿Estan ben definits els requisits al plec? ¿Hi ha criteris implícits que caldria explicitar?`,
 					confidence: 0.3,
 				});
 				continue;
@@ -547,20 +454,18 @@ router.post('/', async (req, res, next) => {
 			logger.info(`✅ Completed evaluation for lot ${lot.lotNumber}`);
 		}
 
-		// Generate overall summary
-		logger.info('📊 Generating overall summary...');
-		const {
-			summary: overallSummary,
-			recommendation: overallRecommendation,
-			confidence: overallConfidence,
-		} = await generateOverallSummary(lotEvaluations);
-
+		// For the result, we only return individual lot evaluations
+		// No overall summary/recommendation needed
 		const result: EvaluationResult = {
 			lots: lotEvaluations,
 			extractedLots: lots,
-			overallSummary,
-			overallRecommendation,
-			overallConfidence,
+			overallSummary: '', // No longer needed
+			overallRecommendation: '', // No longer needed
+			overallConfidence:
+				lotEvaluations.length > 0
+					? lotEvaluations.reduce((sum, lot) => sum + lot.confidence, 0) /
+						lotEvaluations.length
+					: 0,
 		};
 
 		logger.info('✅ Evaluation completed successfully');
