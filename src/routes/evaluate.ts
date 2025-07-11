@@ -8,6 +8,7 @@ import {
 	EvaluationCriteria,
 	EvaluationResult,
 	EvaluationRequest,
+	LotEvaluation,
 } from '../types';
 
 const router = express.Router();
@@ -207,6 +208,7 @@ async function evaluateCriterion(
        - Seccions específiques del plec consultades
        - Parts de l'oferta analitzades
 
+	IDIOMA DE LA RESPOSTA: Català (sempre en català).
     FORMAT DE RESPOSTA (JSON estricte):
     {
       "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
@@ -341,7 +343,7 @@ async function generateExecutiveSummary(
     - Si hi ha criteris "INSUFICIENT": Avaluar si són crítics per la funcionalitat
 
     TO: Professional i objectiu, adequat per a un informe tècnic oficial.
-    IDIOMA: Català
+    IDIOMA DE LA RESPOSTA: Català (sempre en català).
 
     FORMAT DE RESPOSTA (JSON):
     {
@@ -420,7 +422,7 @@ async function generateExecutiveSummary(
 	}
 }
 
-// Main evaluation endpoint
+// Main evaluation endpoint - Legacy single-lot format
 router.post('/', validateEvaluation, async (req, res, next) => {
 	try {
 		if (!process.env.GEMINI_API_KEY) {
@@ -441,7 +443,7 @@ router.post('/', validateEvaluation, async (req, res, next) => {
 			throw new AppError('Se requieren documentos de propuesta', 400);
 		}
 
-		logger.info('🚀 Iniciando evaluación automática...');
+		logger.info('🚀 Iniciando evaluación automática (legacy)...');
 
 		const extractedCriteria = await extractEvaluationCriteria(specifications);
 		if (extractedCriteria.length === 0) {
@@ -473,12 +475,23 @@ router.post('/', validateEvaluation, async (req, res, next) => {
 				proposals,
 			);
 
-		const result: EvaluationResult = {
-			summary,
+		// Convert to new format for compatibility
+		const singleLotEvaluation: LotEvaluation = {
+			lotNumber: 1,
+			lotTitle: 'Lote Únic',
+			hasProposal: true,
 			criteria: criteriaEvaluations,
+			summary,
 			recommendation,
 			confidence,
-			extractedCriteria,
+		};
+
+		const result: EvaluationResult = {
+			lots: [singleLotEvaluation],
+			extractedLots: [{ lotNumber: 1, title: 'Lote Únic' }],
+			overallSummary: summary,
+			overallRecommendation: recommendation,
+			overallConfidence: confidence,
 		};
 
 		logger.info('✅ Evaluación completada exitosamente');

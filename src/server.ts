@@ -7,6 +7,8 @@ import dotenv from 'dotenv';
 
 import uploadRoutes from './routes/upload';
 import evaluateRoutes from './routes/evaluate';
+import extractLotsRoutes from './routes/extractLots';
+import evaluateLotsRoutes from './routes/evaluateLots';
 import logger from './utils/logger';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
@@ -64,7 +66,9 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/upload', uploadRoutes);
-app.use('/api/evaluate', evaluateRoutes);
+app.use('/api/evaluate', evaluateRoutes); // Legacy single-lot evaluation
+app.use('/api/extract-lots', extractLotsRoutes);
+app.use('/api/evaluate-lots', evaluateLotsRoutes);
 
 // Error handling
 app.use(notFound);
