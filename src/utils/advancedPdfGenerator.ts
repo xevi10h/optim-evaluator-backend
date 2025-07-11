@@ -1,9 +1,7 @@
-// Advanced PDF Generator with Puppeteer
-// File: src/utils/advancedPdfGenerator.ts
-
 import puppeteer from 'puppeteer';
 import { EvaluationResult } from '../types';
 import logger from './logger';
+import { OPTIMPEOPLE_LOGO_BASE64 } from './logo';
 
 interface PDFGenerationOptions {
 	tenderTitle: string;
@@ -51,17 +49,13 @@ export async function generateEvaluationPDF(
 		const pdfData = await page.pdf({
 			format: 'A4',
 			margin: {
-				top: '2cm',
+				top: '2.5cm',
 				right: '1.5cm',
-				bottom: '3cm',
+				bottom: '2.5cm',
 				left: '1.5cm',
 			},
 			printBackground: true,
-			displayHeaderFooter: true,
-			headerTemplate: generateHeaderTemplate(options.logoUrl),
-			footerTemplate: generateFooterTemplate(
-				options.companyInfo || DEFAULT_COMPANY_INFO,
-			),
+			displayHeaderFooter: false, // Usaremos header/footer integrados en el HTML
 		});
 
 		// Convert Uint8Array to Buffer
@@ -71,35 +65,6 @@ export async function generateEvaluationPDF(
 	} finally {
 		await browser.close();
 	}
-}
-
-function generateHeaderTemplate(logoUrl?: string): string {
-	if (!logoUrl) {
-		return `
-			<div style="width: 100%; height: 60px; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0;">
-				<div style="background: linear-gradient(135deg, #00b894 0%, #00a085 100%); color: white; padding: 10px 20px; border-radius: 5px; font-family: Arial, sans-serif; font-size: 14px; font-weight: bold;">
-					OPTIMPEOPLE - Informe d'Avaluació
-				</div>
-			</div>
-		`;
-	}
-
-	return `
-		<div style="width: 100%; height: 60px; display: flex; justify-content: center; align-items: center; margin: 0; padding: 0;">
-			<img src="${logoUrl}" style="height: 50px; max-width: 200px; object-fit: contain;" />
-		</div>
-	`;
-}
-
-function generateFooterTemplate(
-	companyInfo: typeof DEFAULT_COMPANY_INFO,
-): string {
-	return `
-		<div style="width: 100%; font-size: 10px; color: #666; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px; line-height: 1.4;">
-			<div><strong>${companyInfo.name}</strong> &nbsp;&nbsp;&nbsp; ${companyInfo.website}</div>
-			<div>${companyInfo.address} &nbsp; ${companyInfo.city} &nbsp;&nbsp;&nbsp; ${companyInfo.taxId} &nbsp;&nbsp;&nbsp; ${companyInfo.phone}</div>
-		</div>
-	`;
 }
 
 function generateHTMLContent(
@@ -112,16 +77,8 @@ function generateHTMLContent(
 		day: 'numeric',
 	});
 
-	const totalCriteria = evaluationResult.criteria.length;
-	const excellentScores = evaluationResult.criteria.filter(
-		(c) => c.score === 'COMPLEIX_EXITOSAMENT',
-	).length;
-	const regularScores = evaluationResult.criteria.filter(
-		(c) => c.score === 'REGULAR',
-	).length;
-	const insufficientScores = evaluationResult.criteria.filter(
-		(c) => c.score === 'INSUFICIENT',
-	).length;
+	const logoSrc = options.logoUrl || OPTIMPEOPLE_LOGO_BASE64;
+	const companyInfo = options.companyInfo || DEFAULT_COMPANY_INFO;
 
 	return `
 <!DOCTYPE html>
@@ -138,356 +95,329 @@ function generateHTMLContent(
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
+            font-family: Arial, sans-serif;
+            line-height: 1.4;
             color: #333;
             background: white;
+            font-size: 12px;
         }
 
-        .container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 20px;
+        .page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        .header-space {
-            height: 80px;
+        .header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 20px 0;
             margin-bottom: 30px;
         }
 
-        .title-section {
-            text-align: center;
-            margin-bottom: 40px;
-            padding: 25px;
-            background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
-            color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 184, 148, 0.3);
+        .logo {
+            height: 50px;
+            max-width: 200px;
         }
 
-        .title-section h1 {
-            font-size: 32px;
-            font-weight: 300;
+        .document-title {
+            text-align: left;
+            margin-bottom: 30px;
+        }
+
+        .document-title h1 {
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        .content {
+            flex: 1;
+            margin-bottom: 40px;
+        }
+
+        .intro-text {
+            margin-bottom: 20px;
+            text-align: justify;
+            line-height: 1.5;
+        }
+
+        .intro-text p {
             margin-bottom: 15px;
-            letter-spacing: -0.5px;
         }
 
-        .title-section .subtitle {
-            font-size: 18px;
-            opacity: 0.9;
-            margin: 8px 0;
-            font-weight: 300;
+        .criteria-flow {
+            margin: 25px 0;
+            padding-left: 20px;
         }
 
-        .info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-            margin-bottom: 40px;
+        .criteria-flow h3 {
+            font-size: 12px;
+            margin-bottom: 15px;
+            font-weight: bold;
         }
 
-        .info-card {
+        .flow-steps {
+            margin-left: 0;
+            padding-left: 0;
+            counter-reset: step-counter;
+        }
+
+        .flow-step {
+            list-style: none;
+            margin-bottom: 15px;
+            counter-increment: step-counter;
+            position: relative;
+            padding-left: 25px;
+        }
+
+        .flow-step::before {
+            content: counter(step-counter) ")";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        .sub-criteria {
+            margin: 10px 0 10px 20px;
+            list-style: none;
+        }
+
+        .sub-criteria li {
+            margin-bottom: 5px;
+            position: relative;
+            padding-left: 15px;
+        }
+
+        .sub-criteria li::before {
+            content: "-";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        .evaluation-section {
+            margin-top: 40px;
+            page-break-before: auto;
+        }
+
+        .evaluation-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 30px;
+            color: #333;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        .tender-info {
             background: #f8f9fa;
             padding: 20px;
             border-radius: 8px;
-            border-left: 5px solid #00b894;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            border-left: 4px solid #00b894;
         }
 
-        .info-card h3 {
+        .tender-info h3 {
             color: #00b894;
+            margin-bottom: 10px;
             font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 12px;
-            font-weight: 600;
         }
 
-        .info-card p {
-            font-size: 16px;
-            font-weight: 500;
-            color: #2d3748;
+        .tender-info p {
+            margin-bottom: 8px;
         }
 
-        .summary-stats {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin: 40px 0;
+        .criteria-evaluation {
+            margin-top: 30px;
         }
 
-        .stat-card {
-            text-align: center;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            transition: transform 0.2s ease;
-        }
-
-        .stat-number {
-            font-size: 28px;
-            font-weight: bold;
-            color: #00b894;
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            font-size: 12px;
-            color: #718096;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 500;
-        }
-
-        .section {
-            margin-bottom: 50px;
+        .criterion-item {
+            margin-bottom: 35px;
             page-break-inside: avoid;
-        }
-
-        .section-title {
-            color: #00b894;
-            border-bottom: 3px solid #00b894;
-            padding-bottom: 12px;
-            margin-bottom: 30px;
-            font-size: 24px;
-            font-weight: 600;
-            letter-spacing: -0.3px;
-        }
-
-        .executive-summary {
-            background: linear-gradient(145deg, #f7fafc 0%, #edf2f7 100%);
-            padding: 30px;
-            border-radius: 12px;
-            border-left: 6px solid #00b894;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .executive-summary h3 {
-            color: #00b894;
-            margin-bottom: 20px;
-            font-size: 20px;
-        }
-
-        .executive-summary p {
-            margin-bottom: 15px;
-            text-align: justify;
-            font-size: 15px;
-            line-height: 1.7;
-        }
-
-        .confidence-indicator {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin: 25px 0;
-            padding: 15px;
-            background: white;
+            border: 1px solid #e0e0e0;
             border-radius: 8px;
-            border: 1px solid #e2e8f0;
-        }
-
-        .confidence-bar {
-            flex: 1;
-            height: 12px;
-            background: #e2e8f0;
-            border-radius: 6px;
             overflow: hidden;
-            position: relative;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
-            border-radius: 6px;
-        }
-
-        .confidence-text {
-            font-weight: 600;
-            font-size: 16px;
-            color: #2d3748;
-            min-width: 70px;
-        }
-
-        .recommendation {
-            padding: 25px;
-            border-radius: 10px;
-            margin: 30px 0;
-            border-left: 6px solid #28a745;
-            background: linear-gradient(145deg, #f0fff4 0%, #dcfce7 100%);
-        }
-
-        .recommendation.warning {
-            background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
-            border-left-color: #f59e0b;
-        }
-
-        .recommendation.danger {
-            background: linear-gradient(145deg, #fef2f2 0%, #fecaca 100%);
-            border-left-color: #ef4444;
-        }
-
-        .recommendation h3 {
-            margin-bottom: 15px;
-            font-size: 18px;
-            color: #1a202c;
-        }
-
-        .recommendation p {
-            font-size: 15px;
-            line-height: 1.6;
-            text-align: justify;
-        }
-
-        .criteria-section {
-            margin-bottom: 40px;
-        }
-
-        .criterion {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            margin-bottom: 30px;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            page-break-inside: avoid;
         }
 
         .criterion-header {
-            padding: 20px 25px;
             background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
             color: white;
+            padding: 15px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .criterion-name {
-            font-weight: 600;
-            font-size: 17px;
+            font-weight: bold;
+            font-size: 14px;
             flex: 1;
-            line-height: 1.4;
         }
 
         .criterion-score {
-            padding: 8px 16px;
-            border-radius: 25px;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 11px;
             font-weight: bold;
-            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-left: 20px;
-        }
-
-        .score-excellent {
-            background: #10b981;
-            color: white;
-            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-        }
-
-        .score-regular {
-            background: #f59e0b;
-            color: white;
-            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-        }
-
-        .score-insufficient {
-            background: #ef4444;
-            color: white;
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
         }
 
         .criterion-content {
-            padding: 25px;
+            padding: 20px;
+            background: white;
         }
 
         .justification {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             text-align: justify;
-            font-size: 14px;
-            line-height: 1.7;
-            color: #374151;
+            line-height: 1.6;
         }
 
         .justification strong {
-            color: #1f2937;
+            color: #2c3e50;
+        }
+
+        .points-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 15px;
         }
 
         .points-section {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid;
         }
 
-        .points-card {
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
+        .points-section.strengths {
+            border-left-color: #28a745;
+            background: #f8fff9;
         }
 
-        .points-card.strengths {
-            border-left: 4px solid #10b981;
-            background: linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%);
+        .points-section.improvements {
+            border-left-color: #ffc107;
+            background: #fffef7;
         }
 
-        .points-card.improvements {
-            border-left: 4px solid #f59e0b;
-            background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
-        }
-
-        .points-card h4 {
-            margin-bottom: 12px;
-            font-size: 14px;
+        .points-section h4 {
+            font-size: 12px;
+            margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            font-weight: 600;
+            font-weight: bold;
         }
 
-        .points-card.strengths h4 {
-            color: #047857;
+        .points-section.strengths h4 {
+            color: #155724;
         }
 
-        .points-card.improvements h4 {
-            color: #92400e;
+        .points-section.improvements h4 {
+            color: #856404;
         }
 
         .points-list {
+            list-style: none;
             margin: 0;
-            padding-left: 18px;
-            list-style-type: disc;
+            padding: 0;
         }
 
         .points-list li {
-            margin-bottom: 8px;
-            font-size: 13px;
-            line-height: 1.5;
-            color: #374151;
+            margin-bottom: 6px;
+            padding-left: 15px;
+            position: relative;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .points-list li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
         }
 
         .references {
-            background: #f3f4f6;
-            padding: 15px 20px;
-            border-radius: 6px;
-            font-size: 12px;
-            color: #6b7280;
-            border-left: 3px solid #9ca3af;
+            background: #f1f3f4;
+            padding: 12px 15px;
+            border-radius: 4px;
+            font-size: 10px;
+            color: #5f6368;
+            border-left: 3px solid #9aa0a6;
+            margin-top: 15px;
         }
 
         .references strong {
-            color: #374151;
+            color: #3c4043;
+        }
+
+        .summary-section {
+            margin-top: 40px;
+            background: #f7f9fc;
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 6px solid #00b894;
+        }
+
+        .summary-section h3 {
+            color: #00b894;
+            margin-bottom: 15px;
+            font-size: 15px;
+        }
+
+        .summary-text {
+            line-height: 1.6;
+            text-align: justify;
+            margin-bottom: 15px;
+        }
+
+        .recommendation {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+            margin-top: 20px;
+        }
+
+        .recommendation.warning {
+            background: #fff8e1;
+            border-left-color: #ffc107;
+        }
+
+        .recommendation.danger {
+            background: #ffebee;
+            border-left-color: #dc3545;
+        }
+
+        .recommendation strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        .footer {
+            margin-top: auto;
+            padding-top: 30px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            font-size: 10px;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .footer .company-name {
+            font-weight: bold;
         }
 
         .page-break {
             page-break-before: always;
-        }
-
-        .footer-space {
-            height: 100px;
-            margin-top: 50px;
         }
 
         @media print {
@@ -495,146 +425,152 @@ function generateHTMLContent(
                 page-break-before: always;
             }
             
-            .criterion {
-                page-break-inside: avoid;
-            }
-            
-            .section {
+            .criterion-item {
                 page-break-inside: avoid;
             }
         }
     </style>
 </head>
 <body>
-    <div class="header-space"></div>
-    
-    <div class="container">
-        <div class="title-section">
-            <h1>Informe d'Avaluació de Licitació</h1>
-            <div class="subtitle">${options.tenderTitle}</div>
-            <div class="subtitle">Data: ${currentDate}</div>
+    <div class="page">
+        <!-- Header with logo -->
+        <div class="header">
+            <img src="${logoSrc}" alt="OptimPeople Logo" class="logo" />
         </div>
 
-        <div class="info-grid">
-            <div class="info-card">
-                <h3>Proposta Avaluada</h3>
-                <p>${options.proposalName}</p>
+        <!-- Main content -->
+        <div class="content">
+            <!-- Document title -->
+            <div class="document-title">
+                <h1>Informe d'Avaluació de Proposta de Licitació</h1>
             </div>
-            <div class="info-card">
-                <h3>Criteris Analitzats</h3>
-                <p>${totalCriteria} criteris subjectius</p>
-            </div>
-        </div>
 
-        <div class="summary-stats">
-            <div class="stat-card">
-                <div class="stat-number">${totalCriteria}</div>
-                <div class="stat-label">Total Criteris</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">${excellentScores}</div>
-                <div class="stat-label">Compleix Exitosament</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">${regularScores}</div>
-                <div class="stat-label">Regular</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">${insufficientScores}</div>
-                <div class="stat-label">Insuficient</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2 class="section-title">Resum Executiu</h2>
-            <div class="executive-summary">
-                <h3>Síntesi de l'Avaluació</h3>
-                ${evaluationResult.summary
-									.split('\n')
-									.map((paragraph) =>
-										paragraph.trim() ? `<p>${paragraph}</p>` : '',
-									)
-									.join('')}
+            <!-- Introduction text -->
+            <div class="intro-text">
+                <p>De moment l'eina es limita a l'avaluació de criteris de valoració subjectiva.</p>
                 
-                <div class="confidence-indicator">
-                    <span><strong>Nivell de confiança de l'avaluació:</strong></span>
-                    <div class="confidence-bar">
-                        <div class="confidence-fill" style="width: ${evaluationResult.confidence * 100}%"></div>
+                <div class="criteria-flow">
+                    <h3>Aquest és el flux de cerca dels apartats que contenen els criteris de valoració subjectiva:</h3>
+                    
+                    <ol class="flow-steps">
+                        <li class="flow-step">
+                            Habitualment, és en els plecs administratius on hi ha els criteris de valoració
+                        </li>
+                        <li class="flow-step">
+                            En algunes ocasions, només hi ha un únic plec que agrupa plec tècnic + plec administratiu. En aquest cas, trobarem els criteris de valoració en aquest únic document
+                        </li>
+                        <li class="flow-step">
+                            Cal analitzar primer si el plec administratiu disposa d'un apartat anomenat "Quadre de característiques...". És una mena d'annex on s'especifica allò important per a les empreses licitants, i sovint incorpora els criteris de valoració. Però no sempre.
+                        </li>
+                        <li class="flow-step">
+                            Tan si és dins del "Quadre de característiques..." com si és en el cos del plec administratiu o document únic, hem d'anar a buscar conceptes com:
+                            <ul class="sub-criteria">
+                                <li>Criteris de valoració</li>
+                                <li>Criteris d'adjudicació</li>
+                                <li>Criteris de puntuació</li>
+                                <li>Ponderació de l'oferta</li>
+                                <li>Mètode d'avaluació</li>
+                                <li>etc.</li>
+                            </ul>
+                        </li>
+                        <li class="flow-step">
+                            Un cop identificat l'apartat on hi ha aquests criteris, el sistema ha de fixar-se en:
+                            <ul class="sub-criteria">
+                                <li>Criteris subjectius</li>
+                                <li>Criteris avaluables segons judici de valor</li>
+                                <li>Criteris no automàtics</li>
+                                <li>Etc.</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+
+                <p>Què cal tenir en compte: que l'oferta ha de respondre al què es demana al plec tècnic. És a dir, la valoració de la bona o mala oferta es fa en base a si aquesta respon adequadament a l'objecte del contracte i a les tasques que cal fer en el marc del contracte.</p>
+            </div>
+
+            <!-- Evaluation section -->
+            <div class="evaluation-section">
+                <h2 class="evaluation-title">Avaluació de la Proposta</h2>
+                
+                <!-- Tender information -->
+                <div class="tender-info">
+                    <h3>Informació de la Licitació</h3>
+                    <p><strong>Títol:</strong> ${options.tenderTitle}</p>
+                    <p><strong>Proposta avaluada:</strong> ${options.proposalName}</p>
+                    <p><strong>Data d'avaluació:</strong> ${currentDate}</p>
+                    <p><strong>Criteris analitzats:</strong> ${evaluationResult.criteria.length} criteris subjectius</p>
+                </div>
+
+                <!-- Criteria evaluation -->
+                <div class="criteria-evaluation">
+                    ${evaluationResult.criteria
+											.map(
+												(criterion) => `
+                        <div class="criterion-item">
+                            <div class="criterion-header">
+                                <div class="criterion-name">${criterion.criterion}</div>
+                                <div class="criterion-score">${getScoreLabel(criterion.score)}</div>
+                            </div>
+                            <div class="criterion-content">
+                                <div class="justification">
+                                    <strong>Avaluació:</strong> ${criterion.justification}
+                                </div>
+                                
+                                <div class="points-grid">
+                                    <div class="points-section strengths">
+                                        <h4>Punts Forts</h4>
+                                        <ul class="points-list">
+                                            ${criterion.strengths.map((strength) => `<li>${strength}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                    <div class="points-section improvements">
+                                        <h4>Àrees de Millora</h4>
+                                        <ul class="points-list">
+                                            ${criterion.improvements.map((improvement) => `<li>${improvement}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="references">
+                                    <strong>Referències consultades:</strong> ${criterion.references.join(' • ')}
+                                </div>
+                            </div>
+                        </div>
+                    `,
+											)
+											.join('')}
+                </div>
+
+                <!-- Summary section -->
+                <div class="summary-section">
+                    <h3>Resum Executiu</h3>
+                    <div class="summary-text">
+                        ${evaluationResult.summary
+													.split('\n')
+													.map((paragraph) =>
+														paragraph.trim() ? `<p>${paragraph}</p>` : '',
+													)
+													.join('')}
                     </div>
-                    <span class="confidence-text">${Math.round(evaluationResult.confidence * 100)}%</span>
+                    
+                    <div class="recommendation ${getRecommendationClass(evaluationResult)}">
+                        <strong>Recomanació Final:</strong>
+                        ${evaluationResult.recommendation}
+                    </div>
                 </div>
             </div>
-
-            <div class="recommendation ${getRecommendationClass(evaluationResult)}">
-                <h3>Recomanació Final</h3>
-                <p>${evaluationResult.recommendation}</p>
-            </div>
         </div>
 
-        <div class="page-break"></div>
-
-        <div class="section">
-            <h2 class="section-title">Avaluació Detallada per Criteris</h2>
-            <div class="criteria-section">
-                ${evaluationResult.criteria
-									.map(
-										(criterion) => `
-                    <div class="criterion">
-                        <div class="criterion-header">
-                            <div class="criterion-name">${criterion.criterion}</div>
-                            <div class="criterion-score ${getScoreClass(criterion.score)}">
-                                ${getScoreLabel(criterion.score)}
-                            </div>
-                        </div>
-                        <div class="criterion-content">
-                            <div class="justification">
-                                <strong>Justificació:</strong> ${criterion.justification}
-                            </div>
-                            
-                            <div class="points-section">
-                                <div class="points-card strengths">
-                                    <h4>Punts Forts</h4>
-                                    <ul class="points-list">
-                                        ${criterion.strengths.map((strength) => `<li>${strength}</li>`).join('')}
-                                    </ul>
-                                </div>
-                                <div class="points-card improvements">
-                                    <h4>Àrees de Millora</h4>
-                                    <ul class="points-list">
-                                        ${criterion.improvements.map((improvement) => `<li>${improvement}</li>`).join('')}
-                                    </ul>
-                                </div>
-                            </div>
-                            
-                            <div class="references">
-                                <strong>Referències consultades:</strong> ${criterion.references.join(' • ')}
-                            </div>
-                        </div>
-                    </div>
-                `,
-									)
-									.join('')}
-            </div>
+        <!-- Footer -->
+        <div class="footer">
+            <div class="company-name">${companyInfo.name}</div>
+            <div>${companyInfo.website}</div>
+            <div>${companyInfo.address} ${companyInfo.city} &nbsp;&nbsp;&nbsp;&nbsp; ${companyInfo.taxId} &nbsp;&nbsp;&nbsp;&nbsp; ${companyInfo.phone}</div>
         </div>
-
-        <div class="footer-space"></div>
     </div>
 </body>
 </html>
     `;
-}
-
-function getScoreClass(score: string): string {
-	switch (score) {
-		case 'COMPLEIX_EXITOSAMENT':
-			return 'score-excellent';
-		case 'REGULAR':
-			return 'score-regular';
-		case 'INSUFICIENT':
-			return 'score-insufficient';
-		default:
-			return 'score-regular';
-	}
 }
 
 function getScoreLabel(score: string): string {
@@ -675,7 +611,7 @@ export async function generatePDFResponse(
 	size: number;
 }> {
 	try {
-		logger.info('📄 Iniciando generación de PDF...');
+		logger.info('📄 Iniciando generación de PDF con formato OptimPeople...');
 
 		const pdfBuffer = await generateEvaluationPDF(evaluationResult, options);
 
@@ -687,7 +623,7 @@ export async function generatePDFResponse(
 			.substring(0, 50); // Limit length
 
 		const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
-		const filename = `informe-avaluacio-${sanitizedTitle}-${timestamp}.pdf`;
+		const filename = `optimpeople-informe-avaluacio-${sanitizedTitle}-${timestamp}.pdf`;
 
 		logger.info(
 			`✅ PDF generado exitosamente: ${filename} (${pdfBuffer.length} bytes)`,
