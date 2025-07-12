@@ -18,8 +18,7 @@
 		"type-check": "tsc --noEmit",
 		"docker:build": "docker build -t optim-evaluator-backend .",
 		"docker:run": "docker run -p 3001:3001 optim-evaluator-backend",
-		"docker:dev": "docker-compose up --build",
-		"prepare": "chmod +x scripts/*.sh"
+		"docker:dev": "docker-compose up --build"
 	},
 	"keywords": [
 		"licitaciones",
