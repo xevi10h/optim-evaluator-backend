@@ -127,7 +127,7 @@ async function evaluateLotCriterion(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert tècnic en avaluació de licitacions amb estàndards d'avaluació rigorosos. Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lote ${lot.lotNumber}) amb criteris estrictes però justos.
+    Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació equilibrats però rigorosos sobre la cobertura de requisits. Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lote ${lot.lotNumber}).
 
     ESPECIFICACIONS:
     ${specsContent}
@@ -141,36 +141,72 @@ async function evaluateLotCriterion(
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
     INSTRUCCIONS D'AVALUACIÓ RIGOROSA:
-    1. Centra't específicament en aquest lote i criteri
-    2. Analitza com la proposta respon als requeriments d'aquest lote
-    3. Usa l'escala amb criteris estrictes: 
-       - INSUFICIENT: No compleix requisits mínims o resposta inadequada
-       - REGULAR: Compleix requisits mínims de manera adequada però estàndard
-       - COMPLEIX_EXITOSAMENT: **NOMÉS** quan supera clarament expectatives, aporta valor excepcional i demostra expertesa superior
-    4. Proporciona justificació detallada (mínim 150 paraules)
-    5. Sigues conservador amb puntuacions altes - "COMPLEIX_EXITOSAMENT" ha de ser realment excepcional
 
-    CRITERIS ESTRICTES PER "COMPLEIX_EXITOSAMENT":
-    - Demostra comprensió excepcional dels requeriments específics del lote
-    - Aporta solucions innovadores o especialment ben fonamentades
-    - Proporciona detalls concrets que mostren expertesa superior
-    - Supera clarament les expectatives mínimes
+    1. **PRIMERA VERIFICACIÓ - COBERTURA ESTRICTA DEL CRITERI:**
+       - Comprova si la proposta aborda ESPECÍFICAMENT el criteri "${criterion}"
+       - Cerca referències DIRECTES i tractament CONCRET d'aquest criteri
+       - Si la proposta parla d'altres temes però NO del criteri específic → OBLIGATÒRIAMENT "INSUFICIENT"
+       - Si no hi ha cap intent de justificar o respondre aquest criteri → OBLIGATÒRIAMENT "INSUFICIENT"
+       - Si la resposta és genèrica sense connexió clara amb el criteri → OBLIGATÒRIAMENT "INSUFICIENT"
+
+    2. **SEGONA VERIFICACIÓ - QUALITAT AMB CRITERIS EXIGENTS:**
+       Si la proposta SÍ aborda específicament el criteri, avalua amb rigor:
+       
+       - **INSUFICIENT**: 
+         * No aborda el criteri específic (cas automàtic)
+         * Parla d'altres temes sense tractar aquest criteri
+         * Resposta genèrica sense connexió clara
+         * Aborda el criteri però de manera clarament inadequada, superficial o errònia
+         
+       - **REGULAR**: 
+         * Aborda el criteri de manera acceptable però sense destacar
+         * Compleix requisits mínims amb resposta estàndard
+         * Demostra comprensió bàsica però sense profunditat
+         * Resposta correcta però predictible i sense valor afegit
+         
+       - **COMPLEIX_EXITOSAMENT** (MOLT EXIGENT): 
+         * Aborda el criteri amb EXCEL·LÈNCIA i PROFUNDITAT excepcionals
+         * Demostra comprensió SUPERIOR i EXPERTESA tècnica clara
+         * Aporta solucions INNOVADORES o especialment ben fonamentades
+         * Inclou detalls CONCRETS i ESPECÍFICS que mostren domini del tema
+         * Va MÉS ENLLÀ dels requisits mínims amb valor afegit SUBSTANCIAL
+         * Proposta que seria difícil de superar per un competidor
+
+    3. **ENFOCAMENT CRÍTIC I EXIGENT:**
+       - Sigues CRÍTIC en la valoració de qualitat
+       - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS
+       - Identifica SEMPRE àrees de millora, fins i tot en bones respostes
+       - No acceptis respostes genèriques o superficials
+       - Exigeix CONCRECIÓ i ESPECIFICITAT en les respostes
+
+    4. **ÀREES DE MILLORA OBLIGATÒRIES:**
+       - Proporciona SEMPRE almenys 3-4 àrees de millora específiques
+       - Fins i tot per a respostes bones, identifica com podrien ser MILLORS
+       - Sigues CONSTRUCTIU però EXIGENT en les recomanacions
+       - Indica què falta o què es podria ampliar
 
 	IDIOMA DE LA RESPOSTA: Català (sempre en català).
     FORMAT DE RESPOSTA (JSON):
     {
       "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
-      "justification": "Justificació detallada amb criteris rigorosos...",
-      "strengths": ["Punt fort 1", "Punt fort 2"],
-      "improvements": ["Millora 1", "Millora 2"],
-      "references": ["Referència 1", "Referència 2"]
+      "justification": "Justificació DETALLADA que expliqui primer si es tracta ESPECÍFICAMENT el criteri, després la qualitat amb criteris EXIGENTS...",
+      "strengths": ["Punt fort específic 1", "Punt fort específic 2"],
+      "improvements": ["Millora concreta 1", "Millora concreta 2", "Millora concreta 3", "Millora concreta 4"],
+      "references": ["Cita específica del text 1", "Cita específica del text 2"]
     }
+
+    REGLES ESTRICTES: 
+    - Si la proposta NO tracta ESPECÍFICAMENT el criteri "${criterion}", SEMPRE "INSUFICIENT"
+    - Si parla d'altres temes sense connectar amb aquest criteri, SEMPRE "INSUFICIENT"  
+    - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS que seria difícil superar
+    - SEMPRE proporciona 3-4 àrees de millora, fins i tot per a bones respostes
+    - Sigues CRÍTIC i EXIGENT en totes les valoracions
   `;
 
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.1, // Reducida para mayor rigor
+			temperature: 0.05, // Muy bajo para ser más consistente y crítico
 		};
 
 		const contents = [
@@ -212,11 +248,16 @@ async function evaluateLotCriterion(
 
 		return {
 			criterion,
-			score: 'REGULAR',
-			justification: `No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber}. Es requereix revisió manual.`,
-			strengths: ['Revisió manual requerida'],
-			improvements: ['Avaluació automàtica fallida'],
-			references: ['Error en processament'],
+			score: 'INSUFICIENT',
+			justification: `No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber}. Error en el processament automàtic. És imprescindible la revisió manual per determinar si la proposta aborda específicament aquest criteri i amb quina qualitat.`,
+			strengths: ['Revisió manual urgent requerida'],
+			improvements: [
+				'Verificar si la proposta tracta aquest criteri específic',
+				'Analitzar la qualitat de la resposta si existeix',
+				'Identificar àrees de millora concretes',
+				'Validar la coherència amb les especificacions del lote',
+			],
+			references: ['Error en processament automàtic'],
 		};
 	}
 }

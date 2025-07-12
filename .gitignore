@@ -5,10 +5,6 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
-# Archivos de bloqueo opcionales
-package-lock.json
-yarn.lock
-
 # Directorio de compilación de TypeScript
 dist/
 build/
