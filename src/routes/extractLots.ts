@@ -32,7 +32,7 @@ async function extractLotsFromSpecifications(
     INSTRUCCIONS D'ANÀLISI:
 
     1. CERCA INDICADORS DE LOTES:
-       - "Lote", "Lot", "Lotes"
+       - "Lot", "Lot", "Lotes"
        - "Grup", "Grupos"
        - "Apartado", "Apartados"
        - "Prestació", "Prestacions"
@@ -54,10 +54,10 @@ async function extractLotsFromSpecifications(
        - Si hi ha dubtes, inclina't cap a un sol lote
 
     EXEMPLES DE LOTES TÍPICS:
-    - Lote 1: Serveis de consultoria
-    - Lote 2: Desenvolupament de software
-    - Lote A: Manteniment d'infraestructures
-    - Lote B: Suport tècnic
+    - Lot 1: Serveis de consultoria
+    - Lot 2: Desenvolupament de software
+    - Lot A: Manteniment d'infraestructures
+    - Lot B: Suport tècnic
 
     FORMAT DE RESPOSTA (JSON estricte):
     [
@@ -77,7 +77,7 @@ async function extractLotsFromSpecifications(
     [
       {
         "lotNumber": 1,
-        "title": "Lote Únic",
+        "title": "Lot Únic",
         "description": "Licitació amb un sol lote"
       }
     ]
@@ -115,7 +115,7 @@ async function extractLotsFromSpecifications(
 			if (Array.isArray(lots) && lots.length > 0) {
 				return lots.map((lot, index) => ({
 					lotNumber: lot.lotNumber || index + 1,
-					title: lot.title || `Lote ${lot.lotNumber || index + 1}`,
+					title: lot.title || `Lot ${lot.lotNumber || index + 1}`,
 					description: lot.description,
 				}));
 			}
@@ -127,7 +127,7 @@ async function extractLotsFromSpecifications(
 		return [
 			{
 				lotNumber: 1,
-				title: 'Lote Únic',
+				title: 'Lot Únic',
 				description: 'Licitació amb un sol lote',
 			},
 		];
@@ -137,7 +137,7 @@ async function extractLotsFromSpecifications(
 		return [
 			{
 				lotNumber: 1,
-				title: 'Lote Únic',
+				title: 'Lot Únic',
 				description: 'Licitació amb un sol lote',
 			},
 		];

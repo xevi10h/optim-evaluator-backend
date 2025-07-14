@@ -1,3 +1,4 @@
+// src/routes/evaluateLots.ts - Actualitzat per suportar múltiples ofertes per lot
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
@@ -31,7 +32,7 @@ async function extractCriteriaForLot(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert en avaluació de licitacions públiques. Extreu els criteris SUBJECTIUS d'avaluació específics per al lote "${lot.title}" (Lote ${lot.lotNumber}).
+    Ets un expert en avaluació de licitacions públiques. Extreu els criteris SUBJECTIUS d'avaluació específics per al lote "${lot.title}" (Lot ${lot.lotNumber}).
 
     DOCUMENTS D'ESPECIFICACIONS:
     ${specsContent}
@@ -116,6 +117,7 @@ async function evaluateLotCriterion(
 	lot: LotInfo,
 	specifications: FileContent[],
 	proposalContent: string,
+	proposalName: string,
 ): Promise<EvaluationCriteria> {
 	const specsContent = specifications
 		.map(
@@ -127,12 +129,12 @@ async function evaluateLotCriterion(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació equilibrats però rigorosos sobre la cobertura de requisits. Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lote ${lot.lotNumber}).
+    Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació equilibrats però rigorosos sobre la cobertura de requisits. Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${proposalName}".
 
     ESPECIFICACIONS:
     ${specsContent}
 
-    PROPOSTA PER AQUEST LOTE:
+    PROPOSTA "${proposalName}" PER AQUEST LOTE:
     ${proposalContent}
 
     LOTE A AVALUAR:
@@ -206,7 +208,7 @@ async function evaluateLotCriterion(
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.05, // Muy bajo para ser más consistente y crítico
+			temperature: 0.05,
 		};
 
 		const contents = [
@@ -217,7 +219,7 @@ async function evaluateLotCriterion(
 		];
 
 		const response = await ai.models.generateContent({
-			model: 'gemini-2.0-flash-lite',
+			model: 'gemini-2.5-pro',
 			config,
 			contents,
 		});
@@ -242,14 +244,14 @@ async function evaluateLotCriterion(
 		}
 	} catch (error) {
 		logger.error(
-			`Error evaluating criterion "${criterion}" for lot ${lot.lotNumber}:`,
+			`Error evaluating criterion "${criterion}" for lot ${lot.lotNumber} proposal ${proposalName}:`,
 			error,
 		);
 
 		return {
 			criterion,
 			score: 'INSUFICIENT',
-			justification: `No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber}. Error en el processament automàtic. És imprescindible la revisió manual per determinar si la proposta aborda específicament aquest criteri i amb quina qualitat.`,
+			justification: `No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber} proposta ${proposalName}. Error en el processament automàtic. És imprescindible la revisió manual per determinar si la proposta aborda específicament aquest criteri i amb quina qualitat.`,
 			strengths: ['Revisió manual urgent requerida'],
 			improvements: [
 				'Verificar si la proposta tracta aquest criteri específic',
@@ -266,6 +268,7 @@ async function generateLotSummary(
 	lot: LotInfo,
 	criteria: EvaluationCriteria[],
 	hasProposal: boolean,
+	proposalName: string,
 ): Promise<{ summary: string; recommendation: string; confidence: number }> {
 	if (!hasProposal) {
 		return {
@@ -294,7 +297,7 @@ async function generateLotSummary(
 	).length;
 
 	const prompt = `
-    Genera un resum i recomanació analítica per al lote ${lot.lotNumber}: ${lot.title}.
+    Genera un resum i recomanació analítica per al lote ${lot.lotNumber}: ${lot.title} de la proposta "${proposalName}".
 
     RESULTATS:
     ${criteriaResults}
@@ -305,7 +308,7 @@ async function generateLotSummary(
     - Insuficient: ${insufficientScores}
 
     INSTRUCCIONS:
-    1. RESUM: Síntesi professional del rendiment d'aquest lote
+    1. RESUM: Síntesi professional del rendiment d'aquesta proposta per aquest lote
     2. RECOMANACIÓ ANALÍTICA (NO decisiva):
        - Identifica els aspectes més destacables de la proposta per aquest lote
        - Assenyala les àrees que requereixen atenció o aclariment
@@ -320,8 +323,8 @@ async function generateLotSummary(
 	IDIOMA DE LA RESPOSTA: Català (sempre en català).
     FORMAT DE RESPOSTA (JSON):
     {
-      "summary": "Resum professional del rendiment d'aquest lote...",
-      "recommendation": "Anàlisi dels punts forts, àrees d'atenció i preguntes clau per a la reflexió sobre aquest lote específic...",
+      "summary": "Resum professional del rendiment d'aquesta proposta per aquest lote...",
+      "recommendation": "Anàlisi dels punts forts, àrees d'atenció i preguntes clau per a la reflexió sobre aquesta proposta específica per aquest lote...",
       "confidence": 0.85
     }
   `;
@@ -361,7 +364,10 @@ async function generateLotSummary(
 			throw new Error('Could not extract JSON from response');
 		}
 	} catch (error) {
-		logger.error(`Error generating summary for lot ${lot.lotNumber}:`, error);
+		logger.error(
+			`Error generating summary for lot ${lot.lotNumber} proposal ${proposalName}:`,
+			error,
+		);
 
 		const scores = criteria.map((c) => {
 			switch (c.score) {
@@ -380,11 +386,28 @@ async function generateLotSummary(
 			scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 2;
 
 		return {
-			summary: `El lote ${lot.lotNumber} ha estat evaluat segons ${criteria.length} criteris. Els resultats mostren un rendiment ${averageScore >= 2.5 ? 'satisfactori' : 'que requereix millores'}.`,
+			summary: `La proposta "${proposalName}" per al lote ${lot.lotNumber} ha estat evaluada segons ${criteria.length} criteris. Els resultats mostren un rendiment ${averageScore >= 2.5 ? 'satisfactori' : 'que requereix millores'}.`,
 			recommendation: `Cal analitzar internament si aquesta proposta s'adequa als objectius específics del lote ${lot.lotNumber}. Es recomana revisar els aspectes destacats i considerar les àrees que necessiten atenció.`,
 			confidence: 0.75,
 		};
 	}
+}
+
+function groupProposalsByName(
+	proposals: FileContent[],
+): Map<string, FileContent[]> {
+	const grouped = new Map<string, FileContent[]>();
+
+	proposals.forEach((proposal) => {
+		const baseName = proposal.name.replace(/\s*\(.*?\)\s*/g, '').trim();
+
+		if (!grouped.has(baseName)) {
+			grouped.set(baseName, []);
+		}
+		grouped.get(baseName)!.push(proposal);
+	});
+
+	return grouped;
 }
 
 router.post('/', async (req, res, next) => {
@@ -413,25 +436,24 @@ router.post('/', async (req, res, next) => {
 
 		logger.info(`🚀 Starting evaluation for ${lots.length} lot(s)...`);
 
-		const lotEvaluations: LotEvaluation[] = [];
+		const allLotEvaluations: LotEvaluation[] = [];
 
 		for (const lot of lots) {
 			logger.info(`🔍 Evaluating lot ${lot.lotNumber}: ${lot.title}`);
 
-			// Check if there are proposals for this lot
 			const lotProposals = proposals.filter(
 				(p) => p.lotNumber === lot.lotNumber,
 			);
-			const hasProposal = lotProposals.length > 0;
 
-			if (!hasProposal) {
+			if (lotProposals.length === 0) {
 				logger.info(`⚠️ No proposal found for lot ${lot.lotNumber}`);
 				const { summary, recommendation, confidence } =
-					await generateLotSummary(lot, [], false);
+					await generateLotSummary(lot, [], false, '');
 
-				lotEvaluations.push({
+				allLotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
+					proposalName: '',
 					hasProposal: false,
 					criteria: [],
 					summary,
@@ -441,71 +463,80 @@ router.post('/', async (req, res, next) => {
 				continue;
 			}
 
-			// Extract criteria for this lot
-			const criteria = await extractCriteriaForLot(specifications, lot);
+			const groupedProposals = groupProposalsByName(lotProposals);
 
-			if (criteria.length === 0) {
-				logger.warn(`No criteria found for lot ${lot.lotNumber}`);
-				lotEvaluations.push({
+			for (const [proposalName, proposalFiles] of groupedProposals) {
+				logger.info(
+					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
+				);
+
+				const criteria = await extractCriteriaForLot(specifications, lot);
+
+				if (criteria.length === 0) {
+					logger.warn(`No criteria found for lot ${lot.lotNumber}`);
+					allLotEvaluations.push({
+						lotNumber: lot.lotNumber,
+						lotTitle: lot.title,
+						proposalName,
+						hasProposal: true,
+						criteria: [],
+						summary: `No s'han pogut extraure criteris d'avaluació per al lote ${lot.lotNumber}`,
+						recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: ¿Estan ben definits els requisits al plec? ¿Hi ha criteris implícits que caldria explicitar?`,
+						confidence: 0.3,
+					});
+					continue;
+				}
+
+				const proposalContent = proposalFiles
+					.map((p) => `=== ${p.name} ===\n${p.content}`)
+					.join('\n\n');
+
+				const criteriaEvaluations: EvaluationCriteria[] = [];
+				for (const criterion of criteria) {
+					const evaluation = await evaluateLotCriterion(
+						criterion,
+						lot,
+						specifications,
+						proposalContent,
+						proposalName,
+					);
+					criteriaEvaluations.push(evaluation);
+				}
+
+				const { summary, recommendation, confidence } =
+					await generateLotSummary(
+						lot,
+						criteriaEvaluations,
+						true,
+						proposalName,
+					);
+
+				allLotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
+					proposalName,
 					hasProposal: true,
-					criteria: [],
-					summary: `No s'han pogut extraure criteris d'avaluació per al lote ${lot.lotNumber}`,
-					recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: ¿Estan ben definits els requisits al plec? ¿Hi ha criteris implícits que caldria explicitar?`,
-					confidence: 0.3,
+					criteria: criteriaEvaluations,
+					summary,
+					recommendation,
+					confidence,
 				});
-				continue;
-			}
 
-			// Combine all proposal content for this lot
-			const lotProposalContent = lotProposals
-				.map((p) => `=== ${p.name} ===\n${p.content}`)
-				.join('\n\n');
-
-			// Evaluate each criterion for this lot
-			const criteriaEvaluations: EvaluationCriteria[] = [];
-			for (const criterion of criteria) {
-				const evaluation = await evaluateLotCriterion(
-					criterion,
-					lot,
-					specifications,
-					lotProposalContent,
+				logger.info(
+					`✅ Completed evaluation for proposal "${proposalName}" in lot ${lot.lotNumber}`,
 				);
-				criteriaEvaluations.push(evaluation);
 			}
-
-			// Generate summary for this lot
-			const { summary, recommendation, confidence } = await generateLotSummary(
-				lot,
-				criteriaEvaluations,
-				hasProposal,
-			);
-
-			lotEvaluations.push({
-				lotNumber: lot.lotNumber,
-				lotTitle: lot.title,
-				hasProposal: true,
-				criteria: criteriaEvaluations,
-				summary,
-				recommendation,
-				confidence,
-			});
-
-			logger.info(`✅ Completed evaluation for lot ${lot.lotNumber}`);
 		}
 
-		// For the result, we only return individual lot evaluations
-		// No overall summary/recommendation needed
 		const result: EvaluationResult = {
-			lots: lotEvaluations,
+			lots: allLotEvaluations,
 			extractedLots: lots,
-			overallSummary: '', // No longer needed
-			overallRecommendation: '', // No longer needed
+			overallSummary: '',
+			overallRecommendation: '',
 			overallConfidence:
-				lotEvaluations.length > 0
-					? lotEvaluations.reduce((sum, lot) => sum + lot.confidence, 0) /
-						lotEvaluations.length
+				allLotEvaluations.length > 0
+					? allLotEvaluations.reduce((sum, lot) => sum + lot.confidence, 0) /
+						allLotEvaluations.length
 					: 0,
 		};
 

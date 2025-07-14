@@ -1,3 +1,4 @@
+// src/types/index.ts - Tipus actualitzats
 export interface FileContent {
 	name: string;
 	content: string;
@@ -23,6 +24,7 @@ export interface EvaluationCriteria {
 export interface LotEvaluation {
 	lotNumber: number;
 	lotTitle: string;
+	proposalName: string;
 	hasProposal: boolean;
 	criteria: EvaluationCriteria[];
 	summary: string;
@@ -36,6 +38,46 @@ export interface EvaluationResult {
 	overallSummary: string;
 	overallRecommendation: string;
 	overallConfidence: number;
+}
+
+export interface CriterionComparison {
+	criterion: string;
+	proposals: Array<{
+		proposalName: string;
+		score: 'INSUFICIENT' | 'REGULAR' | 'COMPLEIX_EXITOSAMENT';
+		arguments: string[];
+		position: number;
+	}>;
+}
+
+export interface ComparisonRanking {
+	proposalName: string;
+	position: number;
+	overallScore: 'INSUFICIENT' | 'REGULAR' | 'COMPLEIX_EXITOSAMENT';
+	strengths: string[];
+	weaknesses: string[];
+	recommendation: string;
+}
+
+export interface ProposalComparison {
+	lotNumber: number;
+	lotTitle: string;
+	proposalNames: string[];
+	criteriaComparisons: CriterionComparison[];
+	globalRanking: ComparisonRanking[];
+	summary: string;
+	confidence: number;
+}
+
+export interface ComparisonRequest {
+	specifications: FileContent[];
+	lotInfo: LotInfo;
+	evaluatedProposals: LotEvaluation[];
+}
+
+export interface ComparisonResult {
+	comparison: ProposalComparison;
+	timestamp: string;
 }
 
 export interface ProcessedFile {
@@ -57,11 +99,6 @@ export interface UploadResponse {
 	};
 }
 
-export interface EvaluationRequest {
-	specifications: FileContent[];
-	proposals: FileContent[];
-}
-
 export interface LotEvaluationRequest {
 	specifications: FileContent[];
 	proposals: FileContent[];
@@ -72,7 +109,7 @@ export interface LotExtractionRequest {
 	specifications: FileContent[];
 }
 
-export interface EvaluationPDFRequest extends EvaluationRequest {
+export interface EvaluationPDFRequest extends LotEvaluationRequest {
 	tenderTitle?: string;
 	logoUrl?: string;
 	companyInfo?: {
