@@ -1,4 +1,3 @@
-// src/types/index.ts - Tipus actualitzats
 export interface FileContent {
 	name: string;
 	content: string;
@@ -103,6 +102,7 @@ export interface LotEvaluationRequest {
 	specifications: FileContent[];
 	proposals: FileContent[];
 	lots: LotInfo[];
+	sessionId?: string;
 }
 
 export interface LotExtractionRequest {

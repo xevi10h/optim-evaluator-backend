@@ -1,4 +1,3 @@
-// src/routes/evaluateLots.ts - Actualitzat per suportar múltiples ofertes per lot
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
@@ -429,6 +428,46 @@ function groupProposalsByName(
 	return grouped;
 }
 
+// Ruta amb simulació de progrés per polling
+const progressStore = new Map<string, any>();
+
+function sendProgress(sessionId: string, data: any) {
+	progressStore.set(sessionId, data);
+}
+
+router.get('/progress/:sessionId', (req, res) => {
+	const { sessionId } = req.params;
+
+	res.writeHead(200, {
+		'Content-Type': 'text/event-stream',
+		'Cache-Control': 'no-cache',
+		Connection: 'keep-alive',
+		'Access-Control-Allow-Origin': '*',
+		'Access-Control-Allow-Headers': 'Cache-Control',
+	});
+
+	const sendEvent = (data: any) => {
+		res.write(`data: ${JSON.stringify(data)}\n\n`);
+	};
+
+	const interval = setInterval(() => {
+		const progress = progressStore.get(sessionId);
+		if (progress) {
+			sendEvent(progress);
+			if (progress.completed) {
+				progressStore.delete(sessionId);
+				clearInterval(interval);
+				res.end();
+			}
+		}
+	}, 500);
+
+	req.on('close', () => {
+		clearInterval(interval);
+		progressStore.delete(sessionId);
+	});
+});
+
 router.post('/', async (req, res, next) => {
 	try {
 		if (!process.env.GEMINI_API_KEY) {
@@ -456,6 +495,17 @@ router.post('/', async (req, res, next) => {
 		logger.info(`🚀 Starting evaluation for ${lots.length} lot(s)...`);
 
 		const allLotEvaluations: LotEvaluation[] = [];
+
+		// Calcular el número total de propuestas para el progreso
+		const totalProposals = lots.reduce((total, lot) => {
+			const lotProposals = proposals.filter(
+				(p) => p.lotNumber === lot.lotNumber,
+			);
+			const groupedProposals = groupProposalsByName(lotProposals);
+			return total + groupedProposals.size;
+		}, 0);
+
+		let currentProposalIndex = 0;
 
 		for (const lot of lots) {
 			logger.info(`🔍 Evaluating lot ${lot.lotNumber}: ${lot.title}`);
@@ -485,8 +535,13 @@ router.post('/', async (req, res, next) => {
 			const groupedProposals = groupProposalsByName(lotProposals);
 
 			for (const [proposalName, proposalFiles] of groupedProposals) {
+				currentProposalIndex++;
+				const progress = Math.round(
+					(currentProposalIndex / totalProposals) * 100,
+				);
+
 				logger.info(
-					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
+					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber} (${currentProposalIndex}/${totalProposals}) - ${progress}%`,
 				);
 
 				const criteria = await extractCriteriaForLot(specifications, lot);
