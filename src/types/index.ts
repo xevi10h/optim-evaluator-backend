@@ -24,6 +24,8 @@ export interface LotEvaluation {
 	lotNumber: number;
 	lotTitle: string;
 	proposalName: string;
+	companyName: string | null;
+	companyConfidence: number;
 	hasProposal: boolean;
 	criteria: EvaluationCriteria[];
 	summary: string;
@@ -43,6 +45,7 @@ export interface CriterionComparison {
 	criterion: string;
 	proposals: Array<{
 		proposalName: string;
+		companyName: string | null;
 		score: 'INSUFICIENT' | 'REGULAR' | 'COMPLEIX_EXITOSAMENT';
 		arguments: string[];
 		position: number;
@@ -51,13 +54,9 @@ export interface CriterionComparison {
 
 export interface ComparisonRanking {
 	proposalName: string;
+	companyName: string | null;
 	position: number;
-	overallScore:
-		| 'Excepcional'
-		| 'Molt bé'
-		| 'Normal'
-		| 'Millorable'
-		| 'Insuficient';
+	overallScore: 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'POOR';
 	strengths: string[];
 	weaknesses: string[];
 	recommendation: string;
@@ -67,6 +66,7 @@ export interface ProposalComparison {
 	lotNumber: number;
 	lotTitle: string;
 	proposalNames: string[];
+	companyNames: (string | null)[];
 	criteriaComparisons: CriterionComparison[];
 	globalRanking: ComparisonRanking[];
 	summary: string;

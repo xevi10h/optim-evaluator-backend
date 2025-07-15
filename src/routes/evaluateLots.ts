@@ -3,6 +3,7 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
 import { AppError } from '../utils/errors';
+import { extractCompanyFromProposal } from '../utils/companyExtractor';
 import {
 	FileContent,
 	LotInfo,
@@ -54,6 +55,8 @@ async function extractCriteriaForLot(
     ["Criteri subjectiu 1", "Criteri subjectiu 2", ...]
 
     Si no trobes criteris específics per aquest lote, retorna criteris generals aplicables.
+    
+    IMPORTANT: Respon SEMPRE en català.
   `;
 
 	try {
@@ -120,6 +123,7 @@ async function evaluateLotCriterion(
 	specifications: FileContent[],
 	proposalContent: string,
 	proposalName: string,
+	companyName: string | null,
 ): Promise<EvaluationCriteria> {
 	const specsContent = specifications
 		.map(
@@ -130,15 +134,19 @@ async function evaluateLotCriterion(
 		)
 		.join('\n\n');
 
+	const companyInfo = companyName
+		? `EMPRESA: ${companyName}`
+		: `DOCUMENT: ${proposalName} (empresa no identificada)`;
+
 	const prompt = `
     Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació EXTREMADAMENT RIGOROSOS sobre la cobertura de requisits. 
 
-    AVALUA amb MÀXIMA ESTRICTESA el criteri "${criterion}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${proposalName}".
+    AVALUA amb MÀXIMA ESTRICTESA el criteri "${criterion}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${companyInfo}".
 
     ESPECIFICACIONS:
     ${specsContent}
 
-    PROPOSTA "${proposalName}" PER AQUEST LOTE:
+    PROPOSTA "${companyInfo}" PER AQUEST LOTE:
     ${proposalContent}
 
     LOTE A AVALUAR:
@@ -191,11 +199,11 @@ async function evaluateLotCriterion(
     - Si tens QUALSEVOL DUBTE sobre si tracta el criteri → "INSUFICIENT"
 
     🔎 **EXEMPLES DE VERIFICACIÓ:**
-    - Criteri: "Metodologia de treball" → Buscar sections sobre metodologia, processos, approach, etc.
+    - Criteri: "Metodologia de treball" → Buscar seccions sobre metodologia, processos, approach, etc.
     - Criteri: "Gestió de riscos" → Buscar mencions de riscos, mitigació, contingències, etc.
-    - Criteri: "Equip tècnic" → Buscar informació d'equip, profiles, organització, etc.
+    - Criteri: "Equip tècnic" → Buscar informació d'equip, perfils, organització, etc.
 
-    IDIOMA DE LA RESPOSTA: Català (sempre en català).
+    IDIOMA DE LA RESPOSTA: Català (SEMPRE en català).
     
     FORMAT DE RESPOSTA (JSON):
     {
@@ -213,6 +221,7 @@ async function evaluateLotCriterion(
     3. En cas de DUBTE sobre si tracta el criteri → SEMPRE "INSUFICIENT"
     4. SEMPRE indica clarament si has trobat el criteri amb "criterionFound": true/false
     5. Les "references" han de ser cites literals del text on es tracta el criteri
+    6. Respon SEMPRE en català
   `;
 
 	try {
@@ -262,18 +271,18 @@ async function evaluateLotCriterion(
 		}
 	} catch (error) {
 		logger.error(
-			`Error evaluating criterion "${criterion}" for lot ${lot.lotNumber} proposal ${proposalName}:`,
+			`Error evaluating criterion "${criterion}" for lot ${lot.lotNumber} company ${companyName || proposalName}:`,
 			error,
 		);
 
 		return {
 			criterion,
 			score: 'INSUFICIENT',
-			justification: `ERROR CRÍTIC: No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber} proposta "${proposalName}". Donat que no es pot verificar si la proposta tracta aquest criteri específic, s'assigna puntuació INSUFICIENT per precaució. REVISIÓ MANUAL URGENT REQUERIDA per determinar si la proposta aborda específicament aquest criteri.`,
+			justification: `ERROR CRÍTIC: No s'ha pogut avaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber} de l'empresa ${companyName || proposalName}. Donat que no es pot verificar si la proposta tracta aquest criteri específic, s'assigna puntuació INSUFICIENT per precaució. REVISIÓ MANUAL URGENT REQUERIDA per determinar si la proposta aborda específicament aquest criteri.`,
 			strengths: [],
 			improvements: [
 				'Verificació manual urgent si la proposta tracta aquest criteri',
-				'Análisi detallat de la cobertura del criteri específic',
+				'Anàlisi detallat de la cobertura del criteri específic',
 				'Validació de la qualitat de la resposta si existeix',
 				'Revisió de la coherència amb les especificacions del lote',
 			],
@@ -289,11 +298,12 @@ async function generateLotSummary(
 	criteria: EvaluationCriteria[],
 	hasProposal: boolean,
 	proposalName: string,
+	companyName: string | null,
 ): Promise<{ summary: string; recommendation: string; confidence: number }> {
 	if (!hasProposal) {
 		return {
 			summary: `No s'ha presentat proposta per al lote ${lot.lotNumber}: ${lot.title}`,
-			recommendation: `Aquest lote no ha rebut cap proposta, pel que no es pot procedir amb l'avaluació. Cal considerar les següents preguntes: ¿Convé relicitar aquest lote específic? ¿Els requisits són adequats per al mercat? ¿Hi ha barreres d'entrada que cal revisar?`,
+			recommendation: `Aquest lote no ha rebut cap proposta, pel que no es pot procedir amb l'avaluació. Cal considerar les següents qüestions: Convé relicitar aquest lote específic? Els requisits són adequats per al mercat? Hi ha barreres d'entrada que cal revisar?`,
 			confidence: 1.0,
 		};
 	}
@@ -316,8 +326,12 @@ async function generateLotSummary(
 		(c) => c.score === 'INSUFICIENT',
 	).length;
 
+	const companyInfo = companyName
+		? `l'empresa "${companyName}"`
+		: `la proposta "${proposalName}" (empresa no identificada)`;
+
 	const prompt = `
-    Genera un resum i recomanació analítica per al lote ${lot.lotNumber}: ${lot.title} de la proposta "${proposalName}".
+    Genera un resum i recomanació analítica per al lote ${lot.lotNumber}: ${lot.title} de ${companyInfo}.
 
     RESULTATS:
     ${criteriaResults}
@@ -340,7 +354,7 @@ async function generateLotSummary(
        - NO facis recomanacions directives de contractació
        - Proporciona elements per a l'anàlisi interna de l'equip
 
-	IDIOMA DE LA RESPOSTA: Català (sempre en català).
+	IDIOMA DE LA RESPOSTA: Català (SEMPRE en català).
     FORMAT DE RESPOSTA (JSON):
     {
       "summary": "Resum professional del rendiment d'aquesta proposta per aquest lote...",
@@ -385,7 +399,7 @@ async function generateLotSummary(
 		}
 	} catch (error) {
 		logger.error(
-			`Error generating summary for lot ${lot.lotNumber} proposal ${proposalName}:`,
+			`Error generating summary for lot ${lot.lotNumber} company ${companyName || proposalName}:`,
 			error,
 		);
 
@@ -405,8 +419,10 @@ async function generateLotSummary(
 		const averageScore =
 			scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 2;
 
+		const companyDisplay = companyName || `la proposta "${proposalName}"`;
+
 		return {
-			summary: `La proposta "${proposalName}" per al lote ${lot.lotNumber} ha estat evaluada segons ${criteria.length} criteris. Els resultats mostren un rendiment ${averageScore >= 2.5 ? 'satisfactori' : 'que requereix millores'}.`,
+			summary: `La proposta de ${companyDisplay} per al lote ${lot.lotNumber} ha estat avaluada segons ${criteria.length} criteris. Els resultats mostren un rendiment ${averageScore >= 2.5 ? 'satisfactori' : 'que requereix millores'}.`,
 			recommendation: `Cal analitzar internament si aquesta proposta s'adequa als objectius específics del lote ${lot.lotNumber}. Es recomana revisar els aspectes destacats i considerar les àrees que necessiten atenció.`,
 			confidence: 0.75,
 		};
@@ -468,12 +484,15 @@ router.post('/', async (req, res, next) => {
 			if (lotProposals.length === 0) {
 				logger.info(`⚠️ No proposal found for lot ${lot.lotNumber}`);
 				const { summary, recommendation, confidence } =
-					await generateLotSummary(lot, [], false, '');
+					await generateLotSummary(lot, [], false, '', null);
 
+				// CORREGIT: Afegir companyName i companyConfidence
 				allLotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
 					proposalName: '',
+					companyName: null, // AFEGIT
+					companyConfidence: 0, // AFEGIT
 					hasProposal: false,
 					criteria: [],
 					summary,
@@ -490,26 +509,39 @@ router.post('/', async (req, res, next) => {
 					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
 				);
 
+				// Extreure nom de l'empresa del contingut de la proposta
+				const proposalContent = proposalFiles
+					.map((p) => `=== ${p.name} ===\n${p.content}`)
+					.join('\n\n');
+
+				const companyExtraction = await extractCompanyFromProposal(
+					proposalContent,
+					proposalName,
+				);
+
+				logger.info(
+					`🏢 Company extraction for "${proposalName}": ${companyExtraction.companyName || 'Not found'} (confidence: ${companyExtraction.confidence})`,
+				);
+
 				const criteria = await extractCriteriaForLot(specifications, lot);
 
 				if (criteria.length === 0) {
 					logger.warn(`No criteria found for lot ${lot.lotNumber}`);
+					// CORREGIT: Afegir companyName i companyConfidence
 					allLotEvaluations.push({
 						lotNumber: lot.lotNumber,
 						lotTitle: lot.title,
 						proposalName,
+						companyName: companyExtraction.companyName, // AFEGIT
+						companyConfidence: companyExtraction.confidence, // AFEGIT
 						hasProposal: true,
 						criteria: [],
-						summary: `No s'han pogut extraure criteris d'avaluació per al lote ${lot.lotNumber}`,
-						recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: ¿Estan ben definits els requisits al plec? ¿Hi ha criteris implícits que caldria explicitar?`,
+						summary: `No s'han pogut extreure criteris d'avaluació per al lote ${lot.lotNumber}`,
+						recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: Estan ben definits els requisits al plec? Hi ha criteris implícits que caldria explicitar?`,
 						confidence: 0.3,
 					});
 					continue;
 				}
-
-				const proposalContent = proposalFiles
-					.map((p) => `=== ${p.name} ===\n${p.content}`)
-					.join('\n\n');
 
 				const criteriaEvaluations: EvaluationCriteria[] = [];
 				for (const criterion of criteria) {
@@ -519,6 +551,7 @@ router.post('/', async (req, res, next) => {
 						specifications,
 						proposalContent,
 						proposalName,
+						companyExtraction.companyName,
 					);
 					criteriaEvaluations.push(evaluation);
 				}
@@ -529,12 +562,16 @@ router.post('/', async (req, res, next) => {
 						criteriaEvaluations,
 						true,
 						proposalName,
+						companyExtraction.companyName,
 					);
 
+				// CORREGIT: Afegir companyName i companyConfidence
 				allLotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
 					proposalName,
+					companyName: companyExtraction.companyName, // AFEGIT
+					companyConfidence: companyExtraction.confidence, // AFEGIT
 					hasProposal: true,
 					criteria: criteriaEvaluations,
 					summary,
@@ -543,7 +580,7 @@ router.post('/', async (req, res, next) => {
 				});
 
 				logger.info(
-					`✅ Completed evaluation for proposal "${proposalName}" in lot ${lot.lotNumber}`,
+					`✅ Completed evaluation for "${companyExtraction.companyName || proposalName}" in lot ${lot.lotNumber}`,
 				);
 			}
 		}

@@ -23,9 +23,13 @@ async function compareProposalsForLot(
 	lotInfo: LotInfo,
 	evaluatedProposals: LotEvaluation[],
 ): Promise<ProposalComparison> {
-	const proposalEvaluations = evaluatedProposals.map(
-		(evaluacio) => `
-    === PROPOSTA: ${evaluacio.proposalName} ===
+	const proposalEvaluations = evaluatedProposals.map((evaluacio) => {
+		const companyDisplay = evaluacio.companyName
+			? `EMPRESA: ${evaluacio.companyName}`
+			: `DOCUMENT: ${evaluacio.proposalName} (empresa no identificada)`;
+
+		return `
+    === PROPOSTA: ${companyDisplay} ===
     AVALUACIÓ INDIVIDUAL:
     ${evaluacio.criteria
 			.map(
@@ -42,8 +46,8 @@ async function compareProposalsForLot(
     RESUM: ${evaluacio.summary}
     RECOMANACIÓ: ${evaluacio.recommendation}
     CONFIANÇA: ${evaluacio.confidence}
-  `,
-	);
+  `;
+	});
 
 	const prompt = `
     Ets un expert en avaluació comparativa de licitacions públiques. Compara les següents ${evaluatedProposals.length} propostes per al lot "${lotInfo.title}" (Lot ${lotInfo.lotNumber}).
@@ -54,7 +58,7 @@ async function compareProposalsForLot(
     INSTRUCCIONS CRÍTIQUES:
 
     1. **COHERÈNCIA ABSOLUTA AMB AVALUACIONS INDIVIDUALS:**
-       - Les puntuacions individuals són INALTERABLE
+       - Les puntuacions individuals són INALTERABLES
        - Si Proposta A té "COMPLEIX_EXITOSAMENT" i Proposta B té "REGULAR" en un criteri, A SEMPRE guanya
        - Si Proposta A té "REGULAR" i Proposta B té "INSUFICIENT", A SEMPRE guanya
        - Només quan les puntuacions són IGUALS cal analitzar els matisos
@@ -62,24 +66,29 @@ async function compareProposalsForLot(
     2. **COMPARACIÓ CRITERI PER CRITERI:**
        - Analitza cada criteri individualment
        - Identifica què destaca cada proposta dins del seu nivell de puntuació
-       - Proporciona arguments específics per a cada proposta
-       - Estableix un ranking coherent amb les puntuacions
+       - Proporciona arguments específics per a cada proposta/empresa
+       - Estableix un rànquing coherent amb les puntuacions
 
-    3. **RANKING GLOBAL:**
-       - Calcula un ranking global basant-te en:
+    3. **RÀNQUING GLOBAL:**
+       - Calcula un rànquing global basant-te en:
          * Nombre de "COMPLEIX_EXITOSAMENT" (prioritat màxima)
          * Nombre de "REGULAR" (prioritat mitjana)
          * Nombre de "INSUFICIENT" (penalització)
          * Qualitat dels arguments dins de cada puntuació
-       - El ranking ha de ser coherent amb les puntuacions individuals
+       - El rànquing ha de ser coherent amb les puntuacions individuals
        - Pot haver-hi empats quan les puntuacions globals són similars
 
     4. **ARGUMENTS EQUILIBRATS:**
-       - Destaca els punts forts de cada proposta
+       - Destaca els punts forts de cada proposta/empresa
        - Sigues específic en els arguments comparatius
-       - Proporciona raons objectives per al ranking
+       - Proporciona raons objectives per al rànquing
 
-    IDIOMA DE LA RESPOSTA: Català (sempre en català).
+    5. **IDENTIFICACIÓ D'EMPRESES:**
+       - Quan mencionesles propostes, utilitza sempre el nom de l'empresa quan estigui disponible
+       - Si no es coneix l'empresa, indica-ho clarament
+       - Mantén la coherència en la identificació a tota la resposta
+
+    IDIOMA DE LA RESPOSTA: Català (SEMPRE en català).
 
     FORMAT DE RESPOSTA (JSON):
     {
@@ -88,13 +97,15 @@ async function compareProposalsForLot(
           "criterion": "Nom del criteri",
           "proposals": [
             {
-              "proposalName": "Nom proposta 1",
+              "proposalName": "Nom proposta/document 1",
+              "companyName": "Nom empresa 1 o null",
               "score": "PUNTUACIÓ_ORIGINAL",
               "arguments": ["Argument específic 1", "Argument específic 2"],
               "position": 1
             },
             {
-              "proposalName": "Nom proposta 2", 
+              "proposalName": "Nom proposta/document 2", 
+              "companyName": "Nom empresa 2 o null",
               "score": "PUNTUACIÓ_ORIGINAL",
               "arguments": ["Argument específic 1", "Argument específic 2"],
               "position": 2
@@ -104,23 +115,26 @@ async function compareProposalsForLot(
       ],
       "globalRanking": [
         {
-          "proposalName": "Nom proposta",
+          "proposalName": "Nom proposta/document",
+          "companyName": "Nom empresa o null",
           "position": 1,
-          "overallScore": "Excepcional|Molt bé|Normal|Millorable|Insuficient",
+          "overallScore": "EXCELLENT|GOOD|AVERAGE|POOR",
           "strengths": ["Punt fort principal 1", "Punt fort principal 2"],
           "weaknesses": ["Punt feble principal 1", "Punt feble principal 2"],
-          "recommendation": "Recomanació específica per aquesta proposta"
+          "recommendation": "Recomanació específica per aquesta proposta/empresa"
         }
       ],
-      "summary": "Resum executiu de la comparació amb recomanacions clares",
+      "summary": "Resum executiu de la comparació amb recomanacions clares, mencionant les empreses quan sigui possible",
       "confidence": 0.85
     }
 
     REGLES ESTRICTES:
     - MAI canviar les puntuacions individuals
-    - El ranking ha de ser matemàticament coherent amb les puntuacions
+    - El rànquing ha de ser matemàticament coherent amb les puntuacions
     - Proporciona arguments específics, no generals
     - Sigues objectiu però constructiu
+    - Utilitza els noms d'empresa quan estiguin disponibles
+    - Respon SEMPRE en català
   `;
 
 	try {
@@ -157,6 +171,7 @@ async function compareProposalsForLot(
 			lotNumber: lotInfo.lotNumber,
 			lotTitle: lotInfo.title,
 			proposalNames: evaluatedProposals.map((p) => p.proposalName),
+			companyNames: evaluatedProposals.map((p) => p.companyName),
 			criteriaComparisons: comparison.criteriaComparisons,
 			globalRanking: comparison.globalRanking,
 			summary: comparison.summary,
@@ -190,6 +205,7 @@ router.post('/', async (req, res, next) => {
 			evaluatedProposalsLength: evaluatedProposals?.length || 0,
 			evaluatedProposals: evaluatedProposals?.map((p) => ({
 				name: p.proposalName,
+				company: p.companyName,
 				lotNumber: p.lotNumber,
 			})),
 		});
