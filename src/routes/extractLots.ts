@@ -1,9 +1,11 @@
-// src/routes/extractLots.ts
+import dotenv from 'dotenv';
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
 import { AppError } from '../utils/errors';
 import { FileContent, LotInfo, LotExtractionRequest } from '../types';
+
+dotenv.config();
 
 const router = express.Router();
 

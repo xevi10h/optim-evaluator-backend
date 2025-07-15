@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
@@ -10,6 +11,8 @@ import {
 	EvaluationResult,
 	LotEvaluationRequest,
 } from '../types';
+
+dotenv.config();
 
 const router = express.Router();
 

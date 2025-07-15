@@ -1,4 +1,4 @@
-// src/routes/compareProposals.ts
+import dotenv from 'dotenv';
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
@@ -10,6 +10,8 @@ import {
 	ComparisonResult,
 	ProposalComparison,
 } from '../types';
+
+dotenv.config();
 
 const router = express.Router();
 
