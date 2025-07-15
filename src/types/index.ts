@@ -52,7 +52,12 @@ export interface CriterionComparison {
 export interface ComparisonRanking {
 	proposalName: string;
 	position: number;
-	overallScore: 'INSUFICIENT' | 'REGULAR' | 'COMPLEIX_EXITOSAMENT';
+	overallScore:
+		| 'Excepcional'
+		| 'Molt bé'
+		| 'Normal'
+		| 'Millorable'
+		| 'Insuficient';
 	strengths: string[];
 	weaknesses: string[];
 	recommendation: string;

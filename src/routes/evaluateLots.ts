@@ -215,7 +215,7 @@ async function evaluateLotCriterion(
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.01, // Temperatura MOLT baixa per màxima consistència
+			temperature: 0.01,
 		};
 
 		const contents = [
@@ -239,7 +239,6 @@ async function evaluateLotCriterion(
 		if (jsonMatch) {
 			const evaluation = JSON.parse(jsonMatch[0]);
 
-			// Verificació addicional: si no s'ha trobat el criteri, forçar INSUFICIENT
 			if (evaluation.criterionFound === false) {
 				evaluation.score = 'INSUFICIENT';
 				if (!evaluation.justification.includes('no es tracta')) {
@@ -428,7 +427,6 @@ function groupProposalsByName(
 	return grouped;
 }
 
-// Ruta amb simulació de progrés per polling
 const progressStore = new Map<string, any>();
 
 function sendProgress(sessionId: string, data: any) {
@@ -474,7 +472,8 @@ router.post('/', async (req, res, next) => {
 			throw new AppError('System API key not configured', 500);
 		}
 
-		const { specifications, proposals, lots }: LotEvaluationRequest = req.body;
+		const { specifications, proposals, lots, sessionId }: LotEvaluationRequest =
+			req.body;
 
 		if (
 			!specifications ||
@@ -496,7 +495,7 @@ router.post('/', async (req, res, next) => {
 
 		const allLotEvaluations: LotEvaluation[] = [];
 
-		// Calcular el número total de propuestas para el progreso
+		// Calculate total proposals for accurate progress tracking
 		const totalProposals = lots.reduce((total, lot) => {
 			const lotProposals = proposals.filter(
 				(p) => p.lotNumber === lot.lotNumber,
@@ -539,6 +538,19 @@ router.post('/', async (req, res, next) => {
 				const progress = Math.round(
 					(currentProposalIndex / totalProposals) * 100,
 				);
+
+				// Send detailed progress update
+				if (sessionId) {
+					sendProgress(sessionId, {
+						currentProposal: proposalName,
+						currentLot: lot.lotNumber,
+						currentIndex: currentProposalIndex,
+						totalProposals: totalProposals,
+						progress: progress,
+						status: `Avaluant proposta "${proposalName}" per al lot ${lot.lotNumber}`,
+						completed: false,
+					});
+				}
 
 				logger.info(
 					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber} (${currentProposalIndex}/${totalProposals}) - ${progress}%`,
@@ -600,6 +612,19 @@ router.post('/', async (req, res, next) => {
 					`✅ Completed evaluation for proposal "${proposalName}" in lot ${lot.lotNumber}`,
 				);
 			}
+		}
+
+		// Send completion signal
+		if (sessionId) {
+			sendProgress(sessionId, {
+				currentProposal: '',
+				currentLot: 0,
+				currentIndex: totalProposals,
+				totalProposals: totalProposals,
+				progress: 100,
+				status: 'Avaluació completada amb èxit',
+				completed: true,
+			});
 		}
 
 		const result: EvaluationResult = {
