@@ -430,53 +430,13 @@ function groupProposalsByName(
 	return grouped;
 }
 
-const progressStore = new Map<string, any>();
-
-function sendProgress(sessionId: string, data: any) {
-	progressStore.set(sessionId, data);
-}
-
-router.get('/progress/:sessionId', (req, res) => {
-	const { sessionId } = req.params;
-
-	res.writeHead(200, {
-		'Content-Type': 'text/event-stream',
-		'Cache-Control': 'no-cache',
-		Connection: 'keep-alive',
-		'Access-Control-Allow-Origin': '*',
-		'Access-Control-Allow-Headers': 'Cache-Control',
-	});
-
-	const sendEvent = (data: any) => {
-		res.write(`data: ${JSON.stringify(data)}\n\n`);
-	};
-
-	const interval = setInterval(() => {
-		const progress = progressStore.get(sessionId);
-		if (progress) {
-			sendEvent(progress);
-			if (progress.completed) {
-				progressStore.delete(sessionId);
-				clearInterval(interval);
-				res.end();
-			}
-		}
-	}, 500);
-
-	req.on('close', () => {
-		clearInterval(interval);
-		progressStore.delete(sessionId);
-	});
-});
-
 router.post('/', async (req, res, next) => {
 	try {
 		if (!process.env.GEMINI_API_KEY) {
 			throw new AppError('System API key not configured', 500);
 		}
 
-		const { specifications, proposals, lots, sessionId }: LotEvaluationRequest =
-			req.body;
+		const { specifications, proposals, lots }: LotEvaluationRequest = req.body;
 
 		if (
 			!specifications ||
@@ -497,17 +457,6 @@ router.post('/', async (req, res, next) => {
 		logger.info(`🚀 Starting evaluation for ${lots.length} lot(s)...`);
 
 		const allLotEvaluations: LotEvaluation[] = [];
-
-		// Calculate total proposals for accurate progress tracking
-		const totalProposals = lots.reduce((total, lot) => {
-			const lotProposals = proposals.filter(
-				(p) => p.lotNumber === lot.lotNumber,
-			);
-			const groupedProposals = groupProposalsByName(lotProposals);
-			return total + groupedProposals.size;
-		}, 0);
-
-		let currentProposalIndex = 0;
 
 		for (const lot of lots) {
 			logger.info(`🔍 Evaluating lot ${lot.lotNumber}: ${lot.title}`);
@@ -537,26 +486,8 @@ router.post('/', async (req, res, next) => {
 			const groupedProposals = groupProposalsByName(lotProposals);
 
 			for (const [proposalName, proposalFiles] of groupedProposals) {
-				currentProposalIndex++;
-				const progress = Math.round(
-					(currentProposalIndex / totalProposals) * 100,
-				);
-
-				// Send detailed progress update
-				if (sessionId) {
-					sendProgress(sessionId, {
-						currentProposal: proposalName,
-						currentLot: lot.lotNumber,
-						currentIndex: currentProposalIndex,
-						totalProposals: totalProposals,
-						progress: progress,
-						status: `Avaluant proposta "${proposalName}" per al lot ${lot.lotNumber}`,
-						completed: false,
-					});
-				}
-
 				logger.info(
-					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber} (${currentProposalIndex}/${totalProposals}) - ${progress}%`,
+					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
 				);
 
 				const criteria = await extractCriteriaForLot(specifications, lot);
@@ -615,19 +546,6 @@ router.post('/', async (req, res, next) => {
 					`✅ Completed evaluation for proposal "${proposalName}" in lot ${lot.lotNumber}`,
 				);
 			}
-		}
-
-		// Send completion signal
-		if (sessionId) {
-			sendProgress(sessionId, {
-				currentProposal: '',
-				currentLot: 0,
-				currentIndex: totalProposals,
-				totalProposals: totalProposals,
-				progress: 100,
-				status: 'Avaluació completada amb èxit',
-				completed: true,
-			});
 		}
 
 		const result: EvaluationResult = {

@@ -107,24 +107,10 @@ export interface LotEvaluationRequest {
 	specifications: FileContent[];
 	proposals: FileContent[];
 	lots: LotInfo[];
-	sessionId?: string;
 }
 
 export interface LotExtractionRequest {
 	specifications: FileContent[];
-}
-
-export interface EvaluationPDFRequest extends LotEvaluationRequest {
-	tenderTitle?: string;
-	logoUrl?: string;
-	companyInfo?: {
-		name: string;
-		website: string;
-		address: string;
-		city: string;
-		taxId: string;
-		phone: string;
-	};
 }
 
 export interface CriteriaExtractionRequest {
@@ -141,25 +127,6 @@ export interface APIError {
 	message: string;
 	status: number;
 	code?: string;
-}
-
-export interface PDFGenerationConfig {
-	headerImageUrl?: string;
-	companyInfo: {
-		name: string;
-		website: string;
-		address: string;
-		city: string;
-		taxId: string;
-		phone: string;
-	};
-}
-
-export interface PDFGenerationResult {
-	buffer: Buffer;
-	filename: string;
-	contentType: string;
-	size: number;
 }
 
 export const SUPPORTED_FILE_TYPES = [
@@ -204,5 +171,4 @@ export interface ValidationSchemas {
 	uploadSchema: any;
 	evaluationSchema: any;
 	criteriaExtractionSchema: any;
-	pdfGenerationSchema: any;
 }
