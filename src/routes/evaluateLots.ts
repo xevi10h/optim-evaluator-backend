@@ -129,7 +129,9 @@ async function evaluateLotCriterion(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació equilibrats però rigorosos sobre la cobertura de requisits. Avalua el criteri "${criterion}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${proposalName}".
+    Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació EXTREMADAMENT RIGOROSOS sobre la cobertura de requisits. 
+
+    AVALUA amb MÀXIMA ESTRICTESA el criteri "${criterion}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${proposalName}".
 
     ESPECIFICACIONS:
     ${specsContent}
@@ -142,73 +144,79 @@ async function evaluateLotCriterion(
     - Títol: ${lot.title}
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
-    INSTRUCCIONS D'AVALUACIÓ RIGOROSA:
+    ⚠️ INSTRUCCIONS D'AVALUACIÓ ULTRA-ESTRICTA ⚠️
 
-    1. **PRIMERA VERIFICACIÓ - COBERTURA ESTRICTA DEL CRITERI:**
-       - Comprova si la proposta aborda ESPECÍFICAMENT el criteri "${criterion}"
-       - Cerca referències DIRECTES i tractament CONCRET d'aquest criteri
-       - Si la proposta parla d'altres temes però NO del criteri específic → OBLIGATÒRIAMENT "INSUFICIENT"
-       - Si no hi ha cap intent de justificar o respondre aquest criteri → OBLIGATÒRIAMENT "INSUFICIENT"
-       - Si la resposta és genèrica sense connexió clara amb el criteri → OBLIGATÒRIAMENT "INSUFICIENT"
+    🔍 **FASE 1 - VERIFICACIÓ D'EXISTÈNCIA (OBLIGATÒRIA):**
+    
+    1. **CERCA EXHAUSTIVA OBLIGATÒRIA:**
+       - Busca ESPECÍFICAMENT el criteri "${criterion}" en el text de la proposta
+       - Cerca SINÒNIMS, PARAULES CLAU i CONCEPTES RELACIONATS amb "${criterion}"
+       - Identifica si hi ha una SECCIÓ DEDICADA, un APARTAT ESPECÍFIC o una MENCIÓ DIRECTA
+       - Comprova si es tracta aquest tema de manera EXPLÍCITA o IMPLÍCITA
+    
+    2. **REGLA ESTRICTA D'EXISTÈNCIA:**
+       - Si NO trobes CAP MENCIÓ, CAP REFERÈNCIA, CAP TRACTAMENT del criteri "${criterion}" → AUTOMÀTICAMENT "INSUFICIENT"
+       - Si la proposta parla d'altres temes però IGNORA completament aquest criteri → AUTOMÀTICAMENT "INSUFICIENT"
+       - Si NO hi ha un apartat, secció o menció que abordi aquest criteri → AUTOMÀTICAMENT "INSUFICIENT"
+       - Si la resposta és genèrica sense connexió clara amb el criteri específic → AUTOMÀTICAMENT "INSUFICIENT"
 
-    2. **SEGONA VERIFICACIÓ - QUALITAT AMB CRITERIS EXIGENTS:**
-       Si la proposta SÍ aborda específicament el criteri, avalua amb rigor:
-       
-       - **INSUFICIENT**: 
-         * No aborda el criteri específic (cas automàtic)
-         * Parla d'altres temes sense tractar aquest criteri
-         * Resposta genèrica sense connexió clara
-         * Aborda el criteri però de manera clarament inadequada, superficial o errònia
-         
-       - **REGULAR**: 
-         * Aborda el criteri de manera acceptable però sense destacar
-         * Compleix requisits mínims amb resposta estàndard
-         * Demostra comprensió bàsica però sense profunditat
-         * Resposta correcta però predictible i sense valor afegit
-         
-       - **COMPLEIX_EXITOSAMENT** (MOLT EXIGENT): 
-         * Aborda el criteri amb EXCEL·LÈNCIA i PROFUNDITAT excepcionals
-         * Demostra comprensió SUPERIOR i EXPERTESA tècnica clara
-         * Aporta solucions INNOVADORES o especialment ben fonamentades
-         * Inclou detalls CONCRETS i ESPECÍFICS que mostren domini del tema
-         * Va MÉS ENLLÀ dels requisits mínims amb valor afegit SUBSTANCIAL
-         * Proposta que seria difícil de superar per un competidor
+    🔍 **FASE 2 - AVALUACIÓ DE QUALITAT (NOMÉS SI EXISTEIX):**
+    
+    NOMÉS si la proposta SÍ tracta específicament el criteri, llavors avalua la qualitat:
+    
+    - **INSUFICIENT**: 
+      * NO tracta el criteri (cas automàtic de la Fase 1)
+      * O tracta el criteri però de manera clarament inadequada, superficial o errònia
+      * Menció molt superficial sense desenvolupament real
+      
+    - **REGULAR**: 
+      * Tracta el criteri de manera acceptable però estàndard
+      * Compleix requisits mínims amb resposta correcta però sense destacar
+      * Demostra comprensió bàsica però sense profunditat especial
+      
+    - **COMPLEIX_EXITOSAMENT** (EXTREMADAMENT EXIGENT): 
+      * Tracta el criteri amb EXCEL·LÈNCIA i PROFUNDITAT excepcionals
+      * Demostra EXPERTESA tècnica i comprensió SUPERIOR
+      * Inclou detalls CONCRETS, ESPECÍFICS i INNOVADORS
+      * Va MOLT MÉS ENLLÀ dels requisits mínims
+      * Solució que seria DIFÍCIL de superar per un competidor
 
-    3. **ENFOCAMENT CRÍTIC I EXIGENT:**
-       - Sigues CRÍTIC en la valoració de qualitat
-       - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS
-       - Identifica SEMPRE àrees de millora, fins i tot en bones respostes
-       - No acceptis respostes genèriques o superficials
-       - Exigeix CONCRECIÓ i ESPECIFICITAT en les respostes
+    🚨 **ENFOCAMENT ULTRA-CRÍTIC:**
+    - Sigues IMPLACABLE en la verificació d'existència del criteri
+    - NO acceptis respostes genèriques que no tractin específicament el criteri
+    - NO donis "REGULAR" si no hi ha tractament específic i clar del criteri
+    - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS
+    - Si tens QUALSEVOL DUBTE sobre si tracta el criteri → "INSUFICIENT"
 
-    4. **ÀREES DE MILLORA OBLIGATÒRIES:**
-       - Proporciona SEMPRE almenys 3-4 àrees de millora específiques
-       - Fins i tot per a respostes bones, identifica com podrien ser MILLORS
-       - Sigues CONSTRUCTIU però EXIGENT en les recomanacions
-       - Indica què falta o què es podria ampliar
+    🔎 **EXEMPLES DE VERIFICACIÓ:**
+    - Criteri: "Metodologia de treball" → Buscar sections sobre metodologia, processos, approach, etc.
+    - Criteri: "Gestió de riscos" → Buscar mencions de riscos, mitigació, contingències, etc.
+    - Criteri: "Equip tècnic" → Buscar informació d'equip, profiles, organització, etc.
 
-	IDIOMA DE LA RESPOSTA: Català (sempre en català).
+    IDIOMA DE LA RESPOSTA: Català (sempre en català).
+    
     FORMAT DE RESPOSTA (JSON):
     {
       "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
-      "justification": "Justificació DETALLADA que expliqui primer si es tracta ESPECÍFICAMENT el criteri, després la qualitat amb criteris EXIGENTS...",
+      "justification": "PRIMER explica si es tracta ESPECÍFICAMENT el criteri '${criterion}' en la proposta (cita on ho trobes o confirma que no hi és). DESPRÉS avalua la qualitat si existeix...",
       "strengths": ["Punt fort específic 1", "Punt fort específic 2"],
-      "improvements": ["Millora concreta 1", "Millora concreta 2", "Millora concreta 3", "Millora concreta 4"],
-      "references": ["Cita específica del text 1", "Cita específica del text 2"]
+      "improvements": ["Millora concreta 1", "Millora concreta 2", "Millora concreta 3"],
+      "references": ["Cita específica del text on es tracta el criteri", "Altra cita relacionada"],
+      "criterionFound": true/false
     }
 
-    REGLES ESTRICTES: 
-    - Si la proposta NO tracta ESPECÍFICAMENT el criteri "${criterion}", SEMPRE "INSUFICIENT"
-    - Si parla d'altres temes sense connectar amb aquest criteri, SEMPRE "INSUFICIENT"  
-    - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS que seria difícil superar
-    - SEMPRE proporciona 3-4 àrees de millora, fins i tot per a bones respostes
-    - Sigues CRÍTIC i EXIGENT en totes les valoracions
+    ⚠️ REGLES INFLEXIBLES:
+    1. Si NO trobes tractament específic del criteri "${criterion}" → SEMPRE "INSUFICIENT" + "criterionFound": false
+    2. Si la proposta parla d'altres temes sense tractar aquest criteri → SEMPRE "INSUFICIENT"
+    3. En cas de DUBTE sobre si tracta el criteri → SEMPRE "INSUFICIENT"
+    4. SEMPRE indica clarament si has trobat el criteri amb "criterionFound": true/false
+    5. Les "references" han de ser cites literals del text on es tracta el criteri
   `;
 
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.05,
+			temperature: 0.01, // Temperatura MOLT baixa per màxima consistència
 		};
 
 		const contents = [
@@ -219,7 +227,7 @@ async function evaluateLotCriterion(
 		];
 
 		const response = await ai.models.generateContent({
-			model: 'gemini-2.5-pro',
+			model: 'gemini-2.0-flash-lite',
 			config,
 			contents,
 		});
@@ -231,6 +239,15 @@ async function evaluateLotCriterion(
 		const jsonMatch = response.text.match(/\{[\s\S]*\}/);
 		if (jsonMatch) {
 			const evaluation = JSON.parse(jsonMatch[0]);
+
+			// Verificació addicional: si no s'ha trobat el criteri, forçar INSUFICIENT
+			if (evaluation.criterionFound === false) {
+				evaluation.score = 'INSUFICIENT';
+				if (!evaluation.justification.includes('no es tracta')) {
+					evaluation.justification = `El criteri "${criterion}" NO es tracta en absolut en la proposta. ${evaluation.justification}`;
+				}
+			}
+
 			return {
 				criterion,
 				score: evaluation.score,
@@ -251,15 +268,17 @@ async function evaluateLotCriterion(
 		return {
 			criterion,
 			score: 'INSUFICIENT',
-			justification: `No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber} proposta ${proposalName}. Error en el processament automàtic. És imprescindible la revisió manual per determinar si la proposta aborda específicament aquest criteri i amb quina qualitat.`,
-			strengths: ['Revisió manual urgent requerida'],
+			justification: `ERROR CRÍTIC: No s'ha pogut evaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber} proposta "${proposalName}". Donat que no es pot verificar si la proposta tracta aquest criteri específic, s'assigna puntuació INSUFICIENT per precaució. REVISIÓ MANUAL URGENT REQUERIDA per determinar si la proposta aborda específicament aquest criteri.`,
+			strengths: [],
 			improvements: [
-				'Verificar si la proposta tracta aquest criteri específic',
-				'Analitzar la qualitat de la resposta si existeix',
-				'Identificar àrees de millora concretes',
-				'Validar la coherència amb les especificacions del lote',
+				'Verificació manual urgent si la proposta tracta aquest criteri',
+				'Análisi detallat de la cobertura del criteri específic',
+				'Validació de la qualitat de la resposta si existeix',
+				'Revisió de la coherència amb les especificacions del lote',
 			],
-			references: ['Error en processament automàtic'],
+			references: [
+				'ERROR EN PROCESSAMENT AUTOMÀTIC - REVISIÓ MANUAL REQUERIDA',
+			],
 		};
 	}
 }
