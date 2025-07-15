@@ -3,7 +3,7 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
 import { AppError } from '../utils/errors';
-import { extractCompanyFromProposal } from '../utils/companyExtractor';
+import { extractCompanyFromProposal } from '../utils/companyExtractor'; // Mantenim com a fallback
 import {
 	FileContent,
 	LotInfo,
@@ -27,6 +27,327 @@ interface EnhancedCriterion {
 	requirements: string;
 	context: string;
 }
+
+interface CompanyExtractionResult {
+	companyName: string; // Ara sempre tindrà un valor, mai serà null
+	confidence: number;
+	reasoning: string;
+}
+
+// NOVA FUNCIÓ: Extracció d'empresa amb IA
+async function extractCompanyWithAI(
+	proposalContent: string,
+	proposalName: string,
+	lotInfo: LotInfo,
+	specifications: FileContent[],
+): Promise<CompanyExtractionResult> {
+	const specsContent = specifications
+		.map(
+			(spec) => `
+    === ESPECIFICACIÓ: ${spec.name} ===
+    ${spec.content}
+  `,
+		)
+		.join('\n\n');
+
+	const prompt = `
+    Ets un expert en anàlisi de licitacions públiques. Analitza el següent document de proposta per identificar amb precisió el nom de l'empresa que presenta la proposta.
+
+    CONTEXT DE LA LICITACIÓ:
+    ${specsContent}
+
+    LOTE ESPECÍFIC:
+    - Número: ${lotInfo.lotNumber}
+    - Títol: ${lotInfo.title}
+    ${lotInfo.description ? `- Descripció: ${lotInfo.description}` : ''}
+
+    DOCUMENT DE PROPOSTA A ANALITZAR:
+    Nom del document: ${proposalName}
+    
+    CONTINGUT DE LA PROPOSTA:
+    ${proposalContent}
+
+    INSTRUCCIONS D'IDENTIFICACIÓ D'EMPRESA:
+
+    1. **CERCA SISTEMÀTICA DEL NOM DE L'EMPRESA:**
+       - Busca la raó social completa de l'empresa
+       - Identifica la denominació oficial que apareix en documents oficials
+       - Troba la forma jurídica (S.L., S.A., S.L.U., etc.)
+       - Localitza presentacions explícites de l'empresa
+
+    2. **PRIORITAT D'INDICADORS (per ordre d'importància):**
+       a) **DECLARACIONS EXPLÍCITES:** "L'empresa...", "La societat...", "Raó social:", "Denominació:"
+       b) **SIGNATURES I REPRESENTANTS:** Signatura amb càrrec i empresa
+       c) **CAPÇALERES I MEMBRETES:** Nom oficial en capçalera de documents
+       d) **DADES FISCALS:** CIF/NIF associat amb nom empresarial
+       e) **CONTEXT CONTRACTUAL:** "El contractista...", "L'adjudicatari...", "La mercantil..."
+
+    3. **CRITERIS DE VALIDACIÓ:**
+       - El nom ha de ser coherent al llarg del document
+       - Ha de tenir sentit com a denominació empresarial
+       - Ha de correspondre amb una entitat jurídica real
+       - Evita noms genèrics, descripcions de projectes o noms de persones físiques isolats
+
+    4. **EXCLUSIONS:**
+       - Noms d'administracions públiques
+       - Títols de projectes o serveis
+       - Noms de persones sense context empresarial clar
+       - Denominacions massa genèriques ("Consultoria", "Serveis", etc.)
+
+    5. **AVALUACIÓ DE CONFIANÇA:**
+       - ALTA (0.8-1.0): Múltiples mencions coherents, forma jurídica clara, context oficial
+       - MITJANA (0.5-0.7): Algunes mencions, context empresarial clar però menys evidències
+       - BAIXA (0.2-0.4): Poques evidències, context dubtós
+       - MOLT BAIXA (0.0-0.1): Informació insuficient o contradictòria
+
+    FORMAT DE RESPOSTA (JSON estricte):
+    {
+      "companyName": "Nom complet de l'empresa tal com apareix oficialment, o 'Empresa no identificada' si no es pot identificar",
+      "confidence": 0.85,
+      "reasoning": "Explicació detallada de com s'ha identificat l'empresa, incloent on apareix al text i per què es considera fiable aquesta identificació. Si no s'ha pogut identificar, explica què s'ha buscat i per què no s'ha trobat."
+    }
+
+    REGLES ESTRICTES:
+    - Si NO trobes evidències clares d'una empresa específica → companyName: "Empresa no identificada"
+    - La confiança ha de reflectir la solidesa de les evidències trobades (0.0 si no s'identifica)
+    - El reasoning ha de ser específic i referenciar parts concretes del text
+    - Respon SEMPRE en català
+    - NO inventis noms d'empresa si no els trobes explícitament
+  `;
+
+	try {
+		const config = {
+			responseMimeType: 'application/json',
+			temperature: 0.1,
+		};
+
+		const contents = [
+			{
+				role: 'user' as const,
+				parts: [{ text: prompt }],
+			},
+		];
+
+		const response = await ai.models.generateContent({
+			model: 'gemini-2.0-flash-lite',
+			config,
+			contents,
+		});
+
+		if (!response?.text) {
+			throw new Error('No response received for company extraction');
+		}
+
+		const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) {
+			throw new Error('Could not extract JSON from response');
+		}
+
+		const result = JSON.parse(jsonMatch[0]);
+
+		// Validació i neteja del resultat
+		let companyName = result.companyName?.trim() || null;
+		const confidence = Math.max(0, Math.min(1, result.confidence || 0));
+		const reasoning = result.reasoning || "No s'ha proporcionat raonament";
+
+		// Si no s'ha identificat cap empresa, assignar nom descriptiu
+		if (!companyName || companyName.length === 0) {
+			companyName = 'Empresa no identificada';
+		}
+
+		logger.info(
+			`🏢 IA Company extraction for "${proposalName}": ${companyName} (confidence: ${confidence.toFixed(2)})`,
+		);
+
+		return {
+			companyName,
+			confidence,
+			reasoning,
+		};
+	} catch (error) {
+		logger.error(
+			`Error extracting company with AI for "${proposalName}":`,
+			error,
+		);
+
+		logger.info(
+			`🔄 Falling back to traditional company extraction for "${proposalName}"`,
+		);
+
+		return {
+			companyName: 'Empresa no identificada',
+			confidence: 0.0,
+			reasoning: `Extracció fallida`,
+		};
+	}
+}
+
+// Funció principal modificada
+router.post('/', async (req, res, next) => {
+	try {
+		if (!process.env.GEMINI_API_KEY) {
+			throw new AppError('System API key not configured', 500);
+		}
+
+		const { specifications, proposals, lots }: LotEvaluationRequest = req.body;
+
+		if (
+			!specifications ||
+			!Array.isArray(specifications) ||
+			specifications.length === 0
+		) {
+			throw new AppError('Specification documents are required', 400);
+		}
+
+		if (!proposals || !Array.isArray(proposals)) {
+			throw new AppError('Proposals array is required', 400);
+		}
+
+		if (!lots || !Array.isArray(lots) || lots.length === 0) {
+			throw new AppError('Lots information is required', 400);
+		}
+
+		logger.info(`🚀 Starting evaluation for ${lots.length} lot(s)...`);
+
+		const allLotEvaluations: LotEvaluation[] = [];
+
+		for (const lot of lots) {
+			logger.info(`🔍 Evaluating lot ${lot.lotNumber}: ${lot.title}`);
+
+			const lotProposals = proposals.filter(
+				(p) => p.lotNumber === lot.lotNumber,
+			);
+
+			if (lotProposals.length === 0) {
+				logger.info(`⚠️ No proposal found for lot ${lot.lotNumber}`);
+				const { summary, recommendation, confidence } =
+					await generateLotSummary(lot, [], false, '', null);
+
+				allLotEvaluations.push({
+					lotNumber: lot.lotNumber,
+					lotTitle: lot.title,
+					proposalName: '',
+					companyName: 'Empresa no identificada',
+					companyConfidence: 0,
+					hasProposal: false,
+					criteria: [],
+					summary,
+					recommendation,
+					confidence,
+				});
+				continue;
+			}
+
+			const groupedProposals = groupProposalsByName(lotProposals);
+
+			for (const [proposalName, proposalFiles] of groupedProposals) {
+				logger.info(
+					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
+				);
+
+				const proposalContent = proposalFiles
+					.map((p) => `=== ${p.name} ===\n${p.content}`)
+					.join('\n\n');
+
+				// CANVI PRINCIPAL: Usar la IA per extreure l'empresa
+				const companyExtraction = await extractCompanyWithAI(
+					proposalContent,
+					proposalName,
+					lot,
+					specifications,
+				);
+
+				logger.info(
+					`🏢 AI Company extraction for "${proposalName}": ${companyExtraction.companyName} (confidence: ${companyExtraction.confidence.toFixed(2)})`,
+				);
+				logger.info(`📝 Reasoning: ${companyExtraction.reasoning}`);
+
+				// Extreure criteris amb context complet
+				const enhancedCriteria = await extractCriteriaForLot(
+					specifications,
+					lot,
+				);
+
+				if (enhancedCriteria.length === 0) {
+					logger.warn(`No criteria found for lot ${lot.lotNumber}`);
+					allLotEvaluations.push({
+						lotNumber: lot.lotNumber,
+						lotTitle: lot.title,
+						proposalName,
+						companyName: companyExtraction.companyName,
+						companyConfidence: companyExtraction.confidence,
+						hasProposal: true,
+						criteria: [],
+						summary: `No s'han pogut extreure criteris d'avaluació per al lote ${lot.lotNumber}`,
+						recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: Estan ben definits els requisits al plec? Hi ha criteris implícits que caldria explicitar?`,
+						confidence: 0.3,
+					});
+					continue;
+				}
+
+				logger.info(
+					`📊 Found ${enhancedCriteria.length} enhanced criteria for lot ${lot.lotNumber}`,
+				);
+
+				const criteriaEvaluations: EvaluationCriteria[] = [];
+				for (const enhancedCriterion of enhancedCriteria) {
+					const evaluation = await evaluateLotCriterion(
+						enhancedCriterion,
+						lot,
+						specifications,
+						proposalContent,
+						proposalName,
+						companyExtraction.companyName,
+					);
+					criteriaEvaluations.push(evaluation);
+				}
+
+				const { summary, recommendation, confidence } =
+					await generateLotSummary(
+						lot,
+						criteriaEvaluations,
+						true,
+						proposalName,
+						companyExtraction.companyName,
+					);
+
+				allLotEvaluations.push({
+					lotNumber: lot.lotNumber,
+					lotTitle: lot.title,
+					proposalName,
+					companyName: companyExtraction.companyName,
+					companyConfidence: companyExtraction.confidence,
+					hasProposal: true,
+					criteria: criteriaEvaluations,
+					summary,
+					recommendation,
+					confidence,
+				});
+
+				logger.info(
+					`✅ Completed evaluation for "${companyExtraction.companyName}" in lot ${lot.lotNumber}`,
+				);
+			}
+		}
+
+		const result: EvaluationResult = {
+			lots: allLotEvaluations,
+			extractedLots: lots,
+			overallSummary: '',
+			overallRecommendation: '',
+			overallConfidence:
+				allLotEvaluations.length > 0
+					? allLotEvaluations.reduce((sum, lot) => sum + lot.confidence, 0) /
+						allLotEvaluations.length
+					: 0,
+		};
+
+		logger.info('✅ Evaluation completed successfully');
+		res.json(result);
+	} catch (error) {
+		next(error);
+	}
+});
 
 async function extractCriteriaForLot(
 	specifications: FileContent[],

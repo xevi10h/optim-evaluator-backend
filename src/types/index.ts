@@ -56,7 +56,12 @@ export interface ComparisonRanking {
 	proposalName: string;
 	companyName: string | null;
 	position: number;
-	overallScore: 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'POOR';
+	overallScore:
+		| 'Excepcional'
+		| 'Molt bé'
+		| 'Notable'
+		| 'Millorable'
+		| 'Insuficient';
 	strengths: string[];
 	weaknesses: string[];
 	recommendation: string;

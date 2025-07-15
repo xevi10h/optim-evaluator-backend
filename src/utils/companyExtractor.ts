@@ -6,31 +6,27 @@ export interface CompanyExtractionResult {
 	source: string;
 }
 
+/**
+ * Extractor tradicional d'empreses - NOMÉS com a fallback quan falla la IA
+ * Aquesta versió està simplificada ja que la IA és el mètode principal
+ */
 export async function extractCompanyFromProposal(
 	proposalContent: string,
 	proposalName: string,
 ): Promise<CompanyExtractionResult> {
 	try {
-		// PATRONS SIMPLIFICATS I DIRECTES per trobar noms d'empresa
+		logger.info(`🔄 Using fallback company extraction for "${proposalName}"`);
+
+		// Patrons simplificats per al fallback
 		const companyPatterns = [
-			// 1. Formes jurídiques clàssiques - PRIORITAT ALTA
-			/([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})[\s]*(?:S\.L\.|S\.A\.|S\.L\.U\.|S\.C\.P\.|C\.B\.|A\.I\.E\.)/gi,
-			/(?:S\.L\.|S\.A\.|S\.L\.U\.|S\.C\.P\.|C\.B\.|A\.I\.E\.)[\s]*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})/gi,
+			// 1. Formes jurídiques - PRIORITAT ALTA
+			/([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{3,40})[\s]*(?:S\.L\.|S\.A\.|S\.L\.U\.|S\.C\.P\.|C\.B\.|A\.I\.E\.)/gi,
 
-			// 2. Declaracions explícites d'empresa - PRIORITAT ALTA
-			/(?:empresa|companyia|societat)[\s:]*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})/gi,
-			/(?:raó social|denominació social)[\s:]*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})/gi,
+			// 2. Declaracions explícites - PRIORITAT ALTA
+			/(?:empresa|companyia|societat|raó social|denominació social)[\s:]*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{3,40})/gi,
 
-			// 3. Presentacions directes - PRIORITAT MITJANA
-			/(?:presenta|sol·licita|ofereix)[\s\w,]{0,20}([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})/gi,
-			/(?:representació de|nom de)[\s:]*((?:[A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})+)/gi,
-
-			// 4. Context amb CIF/NIF - PRIORITAT MITJANA
-			/([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})[\s]*(?:CIF|NIF)[\s:]*[A-Z]?\d{8}[A-Z]?/gi,
-			/(?:CIF|NIF)[\s:]*[A-Z]?\d{8}[A-Z]?[\s]*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})/gi,
-
-			// 5. Càrrecs directius - PRIORITAT BAIXA
-			/(?:administrador|gerent|director|representant) (?:de|d')\s*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{2,40})/gi,
+			// 3. Context amb CIF/NIF - PRIORITAT MITJANA
+			/([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{3,40})[\s]*(?:CIF|NIF)[\s:]*[A-Z]?\d{8}[A-Z]?/gi,
 		];
 
 		const candidates: Array<{
@@ -39,7 +35,7 @@ export async function extractCompanyFromProposal(
 			source: string;
 		}> = [];
 
-		// Buscar candidats amb els patrons
+		// Buscar candidats amb els patrons simplificats
 		companyPatterns.forEach((pattern, index) => {
 			const matches = [...proposalContent.matchAll(pattern)];
 			matches.forEach((match) => {
@@ -47,69 +43,46 @@ export async function extractCompanyFromProposal(
 				if (candidateName && isValidCompanyName(candidateName)) {
 					const cleanName = cleanCompanyName(candidateName);
 
-					// Calcular confiança basada en l'ordre del patró
-					let confidence = 0.9 - index * 0.1; // Primers patrons més confiança
-					if (index === 0 || index === 1) confidence = 0.85; // Formes jurídiques
-					if (index === 2 || index === 3) confidence = 0.8; // Declaracions explícites
+					// Confiança basada en l'ordre del patró (més baixa que la IA)
+					let confidence = 0.6 - index * 0.1; // Màxim 0.6 per fallback
 
 					candidates.push({
 						name: cleanName,
-						confidence: Math.max(0.5, confidence),
-						source: `Pattern ${index + 1}: ${match[0].substring(0, 50)}...`,
+						confidence: Math.max(0.2, confidence),
+						source: `Fallback pattern ${index + 1}`,
 					});
 				}
 			});
 		});
-
-		// Buscar en capçalera del document
-		const headerCompany = extractFromHeader(proposalContent);
-		if (headerCompany) {
-			candidates.push({
-				name: headerCompany,
-				confidence: 0.7,
-				source: 'Document header',
-			});
-		}
 
 		// Buscar en nom del fitxer com a última opció
 		const fileNameCompany = extractFromFileName(proposalName);
 		if (fileNameCompany) {
 			candidates.push({
 				name: fileNameCompany,
-				confidence: 0.6,
-				source: `File name: ${proposalName}`,
+				confidence: 0.3, // Confiança baixa per nom de fitxer
+				source: `Fallback filename: ${proposalName}`,
 			});
 		}
 
-		// Si no trobem res, retornar null
 		if (candidates.length === 0) {
-			logger.info(`No s'ha pogut identificar l'empresa per "${proposalName}"`);
+			logger.info(`❌ Fallback extraction failed for "${proposalName}"`);
 			return {
 				companyName: null,
 				confidence: 0,
-				source: 'No company patterns found',
+				source: 'No fallback patterns found',
 			};
 		}
 
-		// Ordenar per confiança (més alta primer)
+		// Ordenar per confiança
 		candidates.sort((a, b) => b.confidence - a.confidence);
-
-		// Agafar el millor candidat
 		const bestCandidate = candidates[0];
 
-		// Bonus si el mateix nom apareix múltiples vegades
-		const sameNameCount = candidates.filter(
-			(c) =>
-				normalizeForComparison(c.name) ===
-				normalizeForComparison(bestCandidate.name),
-		).length;
-
-		if (sameNameCount > 1) {
-			bestCandidate.confidence = Math.min(0.95, bestCandidate.confidence + 0.1);
-		}
+		// Penalitzar lleugerament per ser fallback
+		bestCandidate.confidence = Math.max(0.1, bestCandidate.confidence * 0.8);
 
 		logger.info(
-			`Empresa identificada: "${bestCandidate.name}" amb confiança ${bestCandidate.confidence.toFixed(2)} per "${proposalName}"`,
+			`⚠️ Fallback extraction for "${proposalName}": ${bestCandidate.name} (confidence: ${bestCandidate.confidence.toFixed(2)})`,
 		);
 
 		return {
@@ -118,37 +91,13 @@ export async function extractCompanyFromProposal(
 			source: bestCandidate.source,
 		};
 	} catch (error) {
-		logger.error("Error extraient nom d'empresa:", error);
+		logger.error('Error in fallback company extraction:', error);
 		return {
 			companyName: null,
 			confidence: 0,
-			source: 'Error during extraction',
+			source: 'Error in fallback extraction',
 		};
 	}
-}
-
-function extractFromHeader(content: string): string | null {
-	// Buscar en les primeres 10 línies
-	const firstLines = content.split('\n').slice(0, 10).join('\n');
-
-	const headerPatterns = [
-		// Empresa amb forma jurídica en capçalera
-		/^[\s]*([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{3,40})[\s]*(?:S\.L\.|S\.A\.|S\.L\.U\.)?[\s]*$/gm,
-		// Capçaleres tipus "PROPOSTA DE [EMPRESA]"
-		/^[\s]*(?:PROPOSTA|OFERTA)[\s]+(?:DE[\s]+)?([A-ZÁÉÍÓÚÀÈÒÇ][A-Za-záéíóúàèòç\s&,.-]{3,40})/gim,
-	];
-
-	for (const pattern of headerPatterns) {
-		const matches = [...firstLines.matchAll(pattern)];
-		for (const match of matches) {
-			const candidateName = match[1]?.trim();
-			if (candidateName && isValidCompanyName(candidateName)) {
-				return cleanCompanyName(candidateName);
-			}
-		}
-	}
-
-	return null;
 }
 
 function extractFromFileName(fileName: string): string | null {
@@ -166,13 +115,6 @@ function extractFromFileName(fileName: string): string | null {
 	}
 
 	return null;
-}
-
-function normalizeForComparison(name: string): string {
-	return name
-		.toLowerCase()
-		.replace(/[^a-z0-9]/g, '')
-		.trim();
 }
 
 function cleanCompanyName(name: string): string {
@@ -230,7 +172,7 @@ function isValidCompanyName(name: string): boolean {
 	// Ha de tenir almenys 3 lletres
 	if (!/[a-zA-ZáéíóúàèòçüñÁÉÍÓÚÀÈÒÇÜÑ]{3,}/.test(name)) return false;
 
-	// No pot ser només majúscules si és molt llarg (probablement és un títol)
+	// No pot ser només majúscules si és molt llarg
 	if (name === name.toUpperCase() && name.length > 15) return false;
 
 	return true;
