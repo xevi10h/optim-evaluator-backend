@@ -21,10 +21,17 @@ const ai = new GoogleGenAI({
 	apiKey: process.env.GEMINI_API_KEY!,
 });
 
+interface EnhancedCriterion {
+	name: string;
+	description: string;
+	requirements: string;
+	context: string;
+}
+
 async function extractCriteriaForLot(
 	specifications: FileContent[],
 	lot: LotInfo,
-): Promise<string[]> {
+): Promise<EnhancedCriterion[]> {
 	const specsContent = specifications
 		.map(
 			(spec) => `
@@ -35,7 +42,7 @@ async function extractCriteriaForLot(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert en avaluació de licitacions públiques. Extreu els criteris SUBJECTIUS d'avaluació específics per al lote "${lot.title}" (Lot ${lot.lotNumber}).
+    Ets un expert en anàlisi de licitacions públiques. Extreu els criteris SUBJECTIUS d'avaluació específics per al lote "${lot.title}" (Lot ${lot.lotNumber}) i proporciona context detallat per cada criteri.
 
     DOCUMENTS D'ESPECIFICACIONS:
     ${specsContent}
@@ -50,13 +57,31 @@ async function extractCriteriaForLot(
     2. INCLOU només criteris SUBJECTIUS que requereixin judici de valor
     3. EXCLOU criteris objectius (preu, certificacions, anys d'experiència exactes)
     4. MÀXIM 8 criteris per mantenir l'avaluació manejable
+    5. PER CADA CRITERI, proporciona:
+       - Nom del criteri (concís)
+       - Descripció detallada (què avalua exactament)
+       - Requisits específics (què ha de complir una proposta)
+       - Context addicional (importància, exemples, notes)
 
-    FORMAT DE RESPOSTA (JSON):
-    ["Criteri subjectiu 1", "Criteri subjectiu 2", ...]
+    EXEMPLES DE CRITERIS BEN FORMATS:
+    - Criteri: "Metodologia de treball"
+      Descripció: "Avalua la qualitat i adequació de la metodologia proposada per desenvolupar els treballs"
+      Requisits: "Ha de descriure fases, activitats, cronograma, recursos, i metodologies específiques. Ha d'estar alineada amb els objectius del projecte"
+      Context: "És fonamental que la metodologia sigui realista, detallada i adaptada als requeriments específics d'aquest lot"
 
-    Si no trobes criteris específics per aquest lote, retorna criteris generals aplicables.
+    FORMAT DE RESPOSTA (JSON estricte):
+    [
+      {
+        "name": "Nom concís del criteri",
+        "description": "Descripció detallada del què avalua aquest criteri",
+        "requirements": "Requisits específics que ha de complir la proposta per aquest criteri",
+        "context": "Context addicional, importància, exemples o notes rellevants"
+      }
+    ]
+
+    Si no trobes criteris específics per aquest lote, retorna criteris generals aplicables amb les seves descripcions.
     
-    IMPORTANT: Respon SEMPRE en català.
+    IMPORTANT: Respon SEMPRE en català i assegura't que cada criteri tingui la seva descripció completa.
   `;
 
 	try {
@@ -84,23 +109,34 @@ async function extractCriteriaForLot(
 
 		try {
 			const criteria = JSON.parse(response.text);
-			return Array.isArray(criteria) ? criteria.slice(0, 8) : [];
+			if (Array.isArray(criteria)) {
+				return criteria.slice(0, 8).map((criterion) => ({
+					name: criterion.name || 'Criteri sense nom',
+					description: criterion.description || 'Descripció no disponible',
+					requirements: criterion.requirements || 'Requisits no especificats',
+					context: criterion.context || 'Context no disponible',
+				}));
+			}
+			return [];
 		} catch (parseError) {
 			logger.warn(
-				'Error parsing criteria JSON, extracting from text:',
+				'Error parsing enhanced criteria JSON, falling back to simple extraction:',
 				parseError,
 			);
-			return extractCriteriaFromText(response.text);
+			return extractSimpleCriteriaFromText(response.text);
 		}
 	} catch (error) {
-		logger.error(`Error extracting criteria for lot ${lot.lotNumber}:`, error);
+		logger.error(
+			`Error extracting enhanced criteria for lot ${lot.lotNumber}:`,
+			error,
+		);
 		return [];
 	}
 }
 
-function extractCriteriaFromText(text: string): string[] {
+function extractSimpleCriteriaFromText(text: string): EnhancedCriterion[] {
 	const lines = text.split('\n');
-	const criteria: string[] = [];
+	const criteria: EnhancedCriterion[] = [];
 
 	for (const line of lines) {
 		const trimmed = line.trim();
@@ -109,7 +145,13 @@ function extractCriteriaFromText(text: string): string[] {
 				.replace(/^[\d\-\*\•\.\)]+\s*/, '')
 				.replace(/["\[\]]/g, '');
 			if (cleaned.length > 5) {
-				criteria.push(cleaned);
+				criteria.push({
+					name: cleaned,
+					description: `Avaluació del criteri: ${cleaned}`,
+					requirements:
+						'La proposta ha de demostrar competència en aquest àmbit',
+					context: 'Criteri extret automàticament del plec de condicions',
+				});
 			}
 		}
 	}
@@ -118,7 +160,7 @@ function extractCriteriaFromText(text: string): string[] {
 }
 
 async function evaluateLotCriterion(
-	criterion: string,
+	criterion: EnhancedCriterion,
 	lot: LotInfo,
 	specifications: FileContent[],
 	proposalContent: string,
@@ -141,7 +183,7 @@ async function evaluateLotCriterion(
 	const prompt = `
     Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació EXTREMADAMENT RIGOROSOS sobre la cobertura de requisits. 
 
-    AVALUA amb MÀXIMA ESTRICTESA el criteri "${criterion}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${companyInfo}".
+    AVALUA amb MÀXIMA ESTRICTESA el criteri "${criterion.name}" per al lote "${lot.title}" (Lot ${lot.lotNumber}) de la proposta "${companyInfo}".
 
     ESPECIFICACIONS:
     ${specsContent}
@@ -154,74 +196,89 @@ async function evaluateLotCriterion(
     - Títol: ${lot.title}
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
+    CRITERI D'AVALUACIÓ AMB CONTEXT COMPLET:
+    - CRITERI: ${criterion.name}
+    - DESCRIPCIÓ: ${criterion.description}
+    - REQUISITS: ${criterion.requirements}
+    - CONTEXT: ${criterion.context}
+
     ⚠️ INSTRUCCIONS D'AVALUACIÓ ULTRA-ESTRICTA ⚠️
 
     🔍 **FASE 1 - VERIFICACIÓ D'EXISTÈNCIA (OBLIGATÒRIA):**
     
     1. **CERCA EXHAUSTIVA OBLIGATÒRIA:**
-       - Busca ESPECÍFICAMENT el criteri "${criterion}" en el text de la proposta
-       - Cerca SINÒNIMS, PARAULES CLAU i CONCEPTES RELACIONATS amb "${criterion}"
+       - Busca ESPECÍFICAMENT aspectes relacionats amb "${criterion.name}" en el text de la proposta
+       - Considera la DESCRIPCIÓ: "${criterion.description}"
+       - Verifica si es compleixen els REQUISITS: "${criterion.requirements}"
+       - Tingues en compte el CONTEXT: "${criterion.context}"
+       - Cerca SINÒNIMS, PARAULES CLAU i CONCEPTES RELACIONATS
        - Identifica si hi ha una SECCIÓ DEDICADA, un APARTAT ESPECÍFIC o una MENCIÓ DIRECTA
        - Comprova si es tracta aquest tema de manera EXPLÍCITA o IMPLÍCITA
     
     2. **REGLA ESTRICTA D'EXISTÈNCIA:**
-       - Si NO trobes CAP MENCIÓ, CAP REFERÈNCIA, CAP TRACTAMENT del criteri "${criterion}" → AUTOMÀTICAMENT "INSUFICIENT"
+       - Si NO trobes CAP MENCIÓ, CAP REFERÈNCIA, CAP TRACTAMENT del criteri "${criterion.name}" → AUTOMÀTICAMENT "INSUFICIENT"
        - Si la proposta parla d'altres temes però IGNORA completament aquest criteri → AUTOMÀTICAMENT "INSUFICIENT"
        - Si NO hi ha un apartat, secció o menció que abordi aquest criteri → AUTOMÀTICAMENT "INSUFICIENT"
        - Si la resposta és genèrica sense connexió clara amb el criteri específic → AUTOMÀTICAMENT "INSUFICIENT"
 
-    🔍 **FASE 2 - AVALUACIÓ DE QUALITAT (NOMÉS SI EXISTEIX):**
+    🔍 **FASE 2 - AVALUACIÓ DE QUALITAT I COMPLETITUD (NOMÉS SI EXISTEIX):**
     
-    NOMÉS si la proposta SÍ tracta específicament el criteri, llavors avalua la qualitat:
+    NOMÉS si la proposta SÍ tracta específicament el criteri, llavors avalua amb aquests estàndards ULTRA-EXIGENTS:
     
     - **INSUFICIENT**: 
       * NO tracta el criteri (cas automàtic de la Fase 1)
       * O tracta el criteri però de manera clarament inadequada, superficial o errònia
       * Menció molt superficial sense desenvolupament real
+      * No compleix els requisits mínims especificats
       
     - **REGULAR**: 
       * Tracta el criteri de manera acceptable però estàndard
-      * Compleix requisits mínims amb resposta correcta però sense destacar
+      * Compleix els requisits mínims especificats però sense destacar
       * Demostra comprensió bàsica però sense profunditat especial
+      * Resposta correcta però genèrica, sense adaptació específica al lot
       
     - **COMPLEIX_EXITOSAMENT** (EXTREMADAMENT EXIGENT): 
       * Tracta el criteri amb EXCEL·LÈNCIA i PROFUNDITAT excepcionals
       * Demostra EXPERTESA tècnica i comprensió SUPERIOR
-      * Inclou detalls CONCRETS, ESPECÍFICS i INNOVADORS
-      * Va MOLT MÉS ENLLÀ dels requisits mínims
+      * Compleix TOTS els requisits especificats amb CREIX
+      * Inclou detalls CONCRETS, ESPECÍFICS i INNOVADORS adaptats al lot
+      * Va MOLT MÉS ENLLÀ dels requisits mínims amb valor afegit
       * Solució que seria DIFÍCIL de superar per un competidor
+      * Demostra comprensió profunda del context específic del lot
 
     🚨 **ENFOCAMENT ULTRA-CRÍTIC:**
     - Sigues IMPLACABLE en la verificació d'existència del criteri
     - NO acceptis respostes genèriques que no tractin específicament el criteri
     - NO donis "REGULAR" si no hi ha tractament específic i clar del criteri
-    - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS
+    - "COMPLEIX_EXITOSAMENT" només per a respostes EXCEPCIONALS que demostrin expertesa superior
     - Si tens QUALSEVOL DUBTE sobre si tracta el criteri → "INSUFICIENT"
 
-    🔎 **EXEMPLES DE VERIFICACIÓ:**
-    - Criteri: "Metodologia de treball" → Buscar seccions sobre metodologia, processos, approach, etc.
-    - Criteri: "Gestió de riscos" → Buscar mencions de riscos, mitigació, contingències, etc.
-    - Criteri: "Equip tècnic" → Buscar informació d'equip, perfils, organització, etc.
+    🔎 **VERIFICACIÓ ESPECÍFICA PER AQUEST CRITERI:**
+    - CRITERI: "${criterion.name}"
+    - BUSCA: Seccions que tractin aspectes relacionats amb "${criterion.description}"
+    - VERIFICA: Que es compleixin els requisits "${criterion.requirements}"
+    - CONSIDERA: El context "${criterion.context}"
 
     IDIOMA DE LA RESPOSTA: Català (SEMPRE en català).
     
     FORMAT DE RESPOSTA (JSON):
     {
       "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
-      "justification": "PRIMER explica si es tracta ESPECÍFICAMENT el criteri '${criterion}' en la proposta (cita on ho trobes o confirma que no hi és). DESPRÉS avalua la qualitat si existeix...",
-      "strengths": ["Punt fort específic 1", "Punt fort específic 2"],
-      "improvements": ["Millora concreta 1", "Millora concreta 2", "Millora concreta 3"],
-      "references": ["Cita específica del text on es tracta el criteri", "Altra cita relacionada"],
+      "justification": "PRIMER explica si es tracta ESPECÍFICAMENT el criteri '${criterion.name}' en la proposta (cita on ho trobes o confirma que no hi és). Considera la descripció: '${criterion.description}' i els requisits: '${criterion.requirements}'. DESPRÉS avalua la qualitat si existeix...",
+      "strengths": ["Punt fort específic relacionat amb ${criterion.name}", "Altre punt fort específic"],
+      "improvements": ["Millora concreta per ${criterion.name}", "Altra millora concreta", "Tercera millora concreta"],
+      "references": ["Cita específica del text on es tracta ${criterion.name}", "Altra cita relacionada"],
       "criterionFound": true/false
     }
 
     ⚠️ REGLES INFLEXIBLES:
-    1. Si NO trobes tractament específic del criteri "${criterion}" → SEMPRE "INSUFICIENT" + "criterionFound": false
+    1. Si NO trobes tractament específic del criteri "${criterion.name}" → SEMPRE "INSUFICIENT" + "criterionFound": false
     2. Si la proposta parla d'altres temes sense tractar aquest criteri → SEMPRE "INSUFICIENT"
     3. En cas de DUBTE sobre si tracta el criteri → SEMPRE "INSUFICIENT"
     4. SEMPRE indica clarament si has trobat el criteri amb "criterionFound": true/false
     5. Les "references" han de ser cites literals del text on es tracta el criteri
-    6. Respon SEMPRE en català
+    6. Considereu sempre el context complet del criteri: nom, descripció, requisits i context
+    7. Respon SEMPRE en català
   `;
 
 	try {
@@ -254,12 +311,12 @@ async function evaluateLotCriterion(
 			if (evaluation.criterionFound === false) {
 				evaluation.score = 'INSUFICIENT';
 				if (!evaluation.justification.includes('no es tracta')) {
-					evaluation.justification = `El criteri "${criterion}" NO es tracta en absolut en la proposta. ${evaluation.justification}`;
+					evaluation.justification = `El criteri "${criterion.name}" NO es tracta en absolut en la proposta. ${evaluation.justification}`;
 				}
 			}
 
 			return {
-				criterion,
+				criterion: criterion.name,
 				score: evaluation.score,
 				justification: evaluation.justification,
 				strengths: evaluation.strengths || [],
@@ -271,23 +328,25 @@ async function evaluateLotCriterion(
 		}
 	} catch (error) {
 		logger.error(
-			`Error evaluating criterion "${criterion}" for lot ${lot.lotNumber} company ${companyName || proposalName}:`,
+			`Error evaluating criterion "${criterion.name}" for lot ${lot.lotNumber} company ${companyName || proposalName}:`,
 			error,
 		);
 
 		return {
-			criterion,
+			criterion: criterion.name,
 			score: 'INSUFICIENT',
-			justification: `ERROR CRÍTIC: No s'ha pogut avaluar automàticament el criteri "${criterion}" per al lote ${lot.lotNumber} de l'empresa ${companyName || proposalName}. Donat que no es pot verificar si la proposta tracta aquest criteri específic, s'assigna puntuació INSUFICIENT per precaució. REVISIÓ MANUAL URGENT REQUERIDA per determinar si la proposta aborda específicament aquest criteri.`,
+			justification: `ERROR CRÍTIC: No s'ha pogut avaluar automàticament el criteri "${criterion.name}" per al lote ${lot.lotNumber} de l'empresa ${companyName || proposalName}. Donat que no es pot verificar si la proposta tracta aquest criteri específic, s'assigna puntuació INSUFICIENT per precaució. REVISIÓ MANUAL URGENT REQUERIDA per determinar si la proposta aborda específicament aquest criteri. Context del criteri: ${criterion.description}`,
 			strengths: [],
 			improvements: [
 				'Verificació manual urgent si la proposta tracta aquest criteri',
 				'Anàlisi detallat de la cobertura del criteri específic',
 				'Validació de la qualitat de la resposta si existeix',
 				'Revisió de la coherència amb les especificacions del lote',
+				`Consideració del context: ${criterion.context}`,
 			],
 			references: [
 				'ERROR EN PROCESSAMENT AUTOMÀTIC - REVISIÓ MANUAL REQUERIDA',
+				`Criteri: ${criterion.name} - ${criterion.description}`,
 			],
 		};
 	}
@@ -333,13 +392,14 @@ async function generateLotSummary(
 	const prompt = `
     Genera un resum i recomanació analítica per al lote ${lot.lotNumber}: ${lot.title} de ${companyInfo}.
 
-    RESULTATS:
+    RESULTATS D'AVALUACIÓ:
     ${criteriaResults}
 
     ESTADÍSTIQUES:
     - Compleix exitosament: ${excellentScores}
     - Regular: ${regularScores}
     - Insuficient: ${insufficientScores}
+    - Total criteris: ${criteria.length}
 
     INSTRUCCIONS:
     1. RESUM: Síntesi professional del rendiment d'aquesta proposta per aquest lote
@@ -486,13 +546,12 @@ router.post('/', async (req, res, next) => {
 				const { summary, recommendation, confidence } =
 					await generateLotSummary(lot, [], false, '', null);
 
-				// CORREGIT: Afegir companyName i companyConfidence
 				allLotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
 					proposalName: '',
-					companyName: null, // AFEGIT
-					companyConfidence: 0, // AFEGIT
+					companyName: null,
+					companyConfidence: 0,
 					hasProposal: false,
 					criteria: [],
 					summary,
@@ -523,17 +582,20 @@ router.post('/', async (req, res, next) => {
 					`🏢 Company extraction for "${proposalName}": ${companyExtraction.companyName || 'Not found'} (confidence: ${companyExtraction.confidence})`,
 				);
 
-				const criteria = await extractCriteriaForLot(specifications, lot);
+				// Extreure criteris amb context complet
+				const enhancedCriteria = await extractCriteriaForLot(
+					specifications,
+					lot,
+				);
 
-				if (criteria.length === 0) {
+				if (enhancedCriteria.length === 0) {
 					logger.warn(`No criteria found for lot ${lot.lotNumber}`);
-					// CORREGIT: Afegir companyName i companyConfidence
 					allLotEvaluations.push({
 						lotNumber: lot.lotNumber,
 						lotTitle: lot.title,
 						proposalName,
-						companyName: companyExtraction.companyName, // AFEGIT
-						companyConfidence: companyExtraction.confidence, // AFEGIT
+						companyName: companyExtraction.companyName,
+						companyConfidence: companyExtraction.confidence,
 						hasProposal: true,
 						criteria: [],
 						summary: `No s'han pogut extreure criteris d'avaluació per al lote ${lot.lotNumber}`,
@@ -543,10 +605,14 @@ router.post('/', async (req, res, next) => {
 					continue;
 				}
 
+				logger.info(
+					`📊 Found ${enhancedCriteria.length} enhanced criteria for lot ${lot.lotNumber}`,
+				);
+
 				const criteriaEvaluations: EvaluationCriteria[] = [];
-				for (const criterion of criteria) {
+				for (const enhancedCriterion of enhancedCriteria) {
 					const evaluation = await evaluateLotCriterion(
-						criterion,
+						enhancedCriterion,
 						lot,
 						specifications,
 						proposalContent,
@@ -565,13 +631,12 @@ router.post('/', async (req, res, next) => {
 						companyExtraction.companyName,
 					);
 
-				// CORREGIT: Afegir companyName i companyConfidence
 				allLotEvaluations.push({
 					lotNumber: lot.lotNumber,
 					lotTitle: lot.title,
 					proposalName,
-					companyName: companyExtraction.companyName, // AFEGIT
-					companyConfidence: companyExtraction.confidence, // AFEGIT
+					companyName: companyExtraction.companyName,
+					companyConfidence: companyExtraction.confidence,
 					hasProposal: true,
 					criteria: criteriaEvaluations,
 					summary,
