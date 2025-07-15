@@ -3,7 +3,6 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import logger from '../utils/logger';
 import { AppError } from '../utils/errors';
-import { extractCompanyFromProposal } from '../utils/companyExtractor'; // Mantenim com a fallback
 import {
 	FileContent,
 	LotInfo,
@@ -34,7 +33,7 @@ interface CompanyExtractionResult {
 	reasoning: string;
 }
 
-// NOVA FUNCIÓ: Extracció d'empresa amb IA
+// FUNCIÓ PRINCIPAL: Extracció d'empresa amb IA
 async function extractCompanyWithAI(
 	proposalContent: string,
 	proposalName: string,
@@ -170,184 +169,13 @@ async function extractCompanyWithAI(
 			error,
 		);
 
-		logger.info(
-			`🔄 Falling back to traditional company extraction for "${proposalName}"`,
-		);
-
 		return {
 			companyName: 'Empresa no identificada',
 			confidence: 0.0,
-			reasoning: `Extracció fallida`,
+			reasoning: `Error en l'extracció automàtica: ${error instanceof Error ? error.message : 'Error desconegut'}`,
 		};
 	}
 }
-
-// Funció principal modificada
-router.post('/', async (req, res, next) => {
-	try {
-		if (!process.env.GEMINI_API_KEY) {
-			throw new AppError('System API key not configured', 500);
-		}
-
-		const { specifications, proposals, lots }: LotEvaluationRequest = req.body;
-
-		if (
-			!specifications ||
-			!Array.isArray(specifications) ||
-			specifications.length === 0
-		) {
-			throw new AppError('Specification documents are required', 400);
-		}
-
-		if (!proposals || !Array.isArray(proposals)) {
-			throw new AppError('Proposals array is required', 400);
-		}
-
-		if (!lots || !Array.isArray(lots) || lots.length === 0) {
-			throw new AppError('Lots information is required', 400);
-		}
-
-		logger.info(`🚀 Starting evaluation for ${lots.length} lot(s)...`);
-
-		const allLotEvaluations: LotEvaluation[] = [];
-
-		for (const lot of lots) {
-			logger.info(`🔍 Evaluating lot ${lot.lotNumber}: ${lot.title}`);
-
-			const lotProposals = proposals.filter(
-				(p) => p.lotNumber === lot.lotNumber,
-			);
-
-			if (lotProposals.length === 0) {
-				logger.info(`⚠️ No proposal found for lot ${lot.lotNumber}`);
-				const { summary, recommendation, confidence } =
-					await generateLotSummary(lot, [], false, '', null);
-
-				allLotEvaluations.push({
-					lotNumber: lot.lotNumber,
-					lotTitle: lot.title,
-					proposalName: '',
-					companyName: 'Empresa no identificada',
-					companyConfidence: 0,
-					hasProposal: false,
-					criteria: [],
-					summary,
-					recommendation,
-					confidence,
-				});
-				continue;
-			}
-
-			const groupedProposals = groupProposalsByName(lotProposals);
-
-			for (const [proposalName, proposalFiles] of groupedProposals) {
-				logger.info(
-					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
-				);
-
-				const proposalContent = proposalFiles
-					.map((p) => `=== ${p.name} ===\n${p.content}`)
-					.join('\n\n');
-
-				// CANVI PRINCIPAL: Usar la IA per extreure l'empresa
-				const companyExtraction = await extractCompanyWithAI(
-					proposalContent,
-					proposalName,
-					lot,
-					specifications,
-				);
-
-				logger.info(
-					`🏢 AI Company extraction for "${proposalName}": ${companyExtraction.companyName} (confidence: ${companyExtraction.confidence.toFixed(2)})`,
-				);
-				logger.info(`📝 Reasoning: ${companyExtraction.reasoning}`);
-
-				// Extreure criteris amb context complet
-				const enhancedCriteria = await extractCriteriaForLot(
-					specifications,
-					lot,
-				);
-
-				if (enhancedCriteria.length === 0) {
-					logger.warn(`No criteria found for lot ${lot.lotNumber}`);
-					allLotEvaluations.push({
-						lotNumber: lot.lotNumber,
-						lotTitle: lot.title,
-						proposalName,
-						companyName: companyExtraction.companyName,
-						companyConfidence: companyExtraction.confidence,
-						hasProposal: true,
-						criteria: [],
-						summary: `No s'han pogut extreure criteris d'avaluació per al lote ${lot.lotNumber}`,
-						recommendation: `Es requereix revisió manual dels criteris d'avaluació per aquest lote. Cal considerar: Estan ben definits els requisits al plec? Hi ha criteris implícits que caldria explicitar?`,
-						confidence: 0.3,
-					});
-					continue;
-				}
-
-				logger.info(
-					`📊 Found ${enhancedCriteria.length} enhanced criteria for lot ${lot.lotNumber}`,
-				);
-
-				const criteriaEvaluations: EvaluationCriteria[] = [];
-				for (const enhancedCriterion of enhancedCriteria) {
-					const evaluation = await evaluateLotCriterion(
-						enhancedCriterion,
-						lot,
-						specifications,
-						proposalContent,
-						proposalName,
-						companyExtraction.companyName,
-					);
-					criteriaEvaluations.push(evaluation);
-				}
-
-				const { summary, recommendation, confidence } =
-					await generateLotSummary(
-						lot,
-						criteriaEvaluations,
-						true,
-						proposalName,
-						companyExtraction.companyName,
-					);
-
-				allLotEvaluations.push({
-					lotNumber: lot.lotNumber,
-					lotTitle: lot.title,
-					proposalName,
-					companyName: companyExtraction.companyName,
-					companyConfidence: companyExtraction.confidence,
-					hasProposal: true,
-					criteria: criteriaEvaluations,
-					summary,
-					recommendation,
-					confidence,
-				});
-
-				logger.info(
-					`✅ Completed evaluation for "${companyExtraction.companyName}" in lot ${lot.lotNumber}`,
-				);
-			}
-		}
-
-		const result: EvaluationResult = {
-			lots: allLotEvaluations,
-			extractedLots: lots,
-			overallSummary: '',
-			overallRecommendation: '',
-			overallConfidence:
-				allLotEvaluations.length > 0
-					? allLotEvaluations.reduce((sum, lot) => sum + lot.confidence, 0) /
-						allLotEvaluations.length
-					: 0,
-		};
-
-		logger.info('✅ Evaluation completed successfully');
-		res.json(result);
-	} catch (error) {
-		next(error);
-	}
-});
 
 async function extractCriteriaForLot(
 	specifications: FileContent[],
@@ -889,19 +717,22 @@ router.post('/', async (req, res, next) => {
 					`📋 Evaluating proposal "${proposalName}" for lot ${lot.lotNumber}`,
 				);
 
-				// Extreure nom de l'empresa del contingut de la proposta
 				const proposalContent = proposalFiles
 					.map((p) => `=== ${p.name} ===\n${p.content}`)
 					.join('\n\n');
 
-				const companyExtraction = await extractCompanyFromProposal(
+				// CANVI PRINCIPAL: Usar la IA per extreure l'empresa
+				const companyExtraction = await extractCompanyWithAI(
 					proposalContent,
 					proposalName,
+					lot,
+					specifications,
 				);
 
 				logger.info(
-					`🏢 Company extraction for "${proposalName}": ${companyExtraction.companyName || 'Not found'} (confidence: ${companyExtraction.confidence})`,
+					`🏢 AI Company extraction for "${proposalName}": ${companyExtraction.companyName} (confidence: ${companyExtraction.confidence.toFixed(2)})`,
 				);
+				logger.info(`📝 Reasoning: ${companyExtraction.reasoning}`);
 
 				// Extreure criteris amb context complet
 				const enhancedCriteria = await extractCriteriaForLot(
@@ -966,7 +797,7 @@ router.post('/', async (req, res, next) => {
 				});
 
 				logger.info(
-					`✅ Completed evaluation for "${companyExtraction.companyName || proposalName}" in lot ${lot.lotNumber}`,
+					`✅ Completed evaluation for "${companyExtraction.companyName}" in lot ${lot.lotNumber}`,
 				);
 			}
 		}
