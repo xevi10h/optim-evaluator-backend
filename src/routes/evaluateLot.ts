@@ -299,7 +299,7 @@ async function evaluateProposalWithCompanyExtraction(
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.15,
+			temperature: 0.1,
 		};
 
 		const contents = [
