@@ -44,51 +44,75 @@ async function extractLotCriteria(
 	const specsContent = specifications
 		.map(
 			(spec) => `
-    === DOCUMENT: ${spec.name} ===
+    === DOCUMENT COMPLET: ${spec.name} ===
     ${spec.content}
   `,
 		)
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert en anàlisi de licitacions públiques. Extreu els criteris SUBJECTIUS d'avaluació específics per al lote "${lot.title}" (Lot ${lot.lotNumber}) i proporciona context detallat per cada criteri.
+    Ets un expert en anàlisi de licitacions públiques amb màxima precisió. Extreu els criteris SUBJECTIUS d'avaluació específics per al lote "${lot.title}" (Lot ${lot.lotNumber}) amb MÀXIM DETALL i CONTEXT ABSOLUT.
 
-    DOCUMENTS D'ESPECIFICACIONS:
+    DOCUMENTS D'ESPECIFICACIONS COMPLETES:
     ${specsContent}
 
-    LOTE A ANALITZAR:
+    INFORMACIÓ ESPECÍFICA DEL LOTE:
     - Número: ${lot.lotNumber}
     - Títol: ${lot.title}
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
-    INSTRUCCIONS:
-    1. CERCA criteris específics per aquest lote o criteris generals aplicables
-    2. INCLOU només criteris SUBJECTIUS que requereixin judici de valor
-    3. EXCLOU criteris objectius (preu, certificacions, anys d'experiència exactes)
-    4. MÀXIM 8 criteris per mantenir l'avaluació manejable
-    5. PER CADA CRITERI, proporciona:
-       - Nom del criteri (concís)
-       - Descripció detallada (què avalua exactament)
-       - Requisits específics (què ha de complir una proposta)
-       - Context addicional (importància, exemples, notes)
+    INSTRUCCIONS D'EXTRACCIÓ EXHAUSTIVA I IMPECABLE:
+    
+    1. ANALITZA PROFUNDAMENT tot el context del lote dins les especificacions
+    2. IDENTIFICA amb precisió absoluta tots els elements OBLIGATORIS del lote
+    3. DETERMINA exactament què serveis/productes ha de proporcionar aquest lote
+    4. ESPECIFICA amb màxim detall tots els deliverables esperats
+    5. EXTREU criteris SUBJECTIUS amb descripció COMPLETA i INFALIBLE
+    6. DEFINEIX per cada criteri exactament què ha d'aparèixer a la proposta
+    7. ESTABLEIX el context COMPLET per detectar propostes inadequades
+    8. MÀXIM 8 criteris que cobreixin TOTS els aspectes CRÍTICS
+
+    REQUERIMENTS CRÍTICS PER CADA CRITERI:
+    - Nom específic i precís del criteri
+    - Descripció EXHAUSTIVA de què avalua dins aquest lote concret
+    - Requisits OBLIGATORIS detallats que ha de contenir la proposta
+    - Context COMPLET: objectiu, importància, exemples concrets, indicadors de qualitat
+    - Elements ESPECÍFICS que han d'aparèixer per aprovar el criteri
+    - Paraules clau o conceptes que obligatòriament ha de mencionar la proposta
+
+    INFORMACIÓ ESSENCIAL PER DETECCIÓ D'INADEQUACIÓ:
+    - Àmbit d'actuació ESPECÍFIC del lote
+    - Serveis/productes CONCRETS que ha de proporcionar
+    - Metodologia o enfoc REQUERIT
+    - Deliverables ESPECÍFICS i mesurables
+    - Aspectes tècnics CRÍTICS i obligatoris
+    - Innovació o valor afegit ESPERAT
+    - Terminis i fases de lliurament ESPECÍFICS
 
     FORMAT DE RESPOSTA (JSON estricte):
     [
       {
-        "name": "Nom concís del criteri",
-        "description": "Descripció detallada del què avalua aquest criteri",
-        "requirements": "Requisits específics que ha de complir la proposta per aquest criteri",
-        "context": "Context addicional, importància, exemples o notes rellevants"
+        "name": "Nom específic i precís del criteri",
+        "description": "Descripció EXHAUSTIVA del què avalua aquest criteri dins del context ESPECÍFIC d'aquest lote, incloent tots els aspectes tècnics, metodològics i de qualitat que ha de cobrir obligatòriament",
+        "requirements": "Llista DETALLADA i ESPECÍFICA dels requisits OBLIGATORIS: què exactament ha d'aparèixer a la proposta, quins conceptes ha de mencionar, quins deliverables ha de proposar, quina metodologia ha de descriure per superar aquest criteri",
+        "context": "Context COMPLET del criteri: objectiu específic dins del lote, importància crítica, relació amb altres criteris, exemples concrets d'allò que s'espera, paraules clau que han d'aparèixer, indicadors de qualitat esperats, i com detectar si una proposta NO compleix aquest criteri específic"
       }
     ]
 
-    IMPORTANT: Respon SEMPRE en català i assegura't que cada criteri tingui la seva descripció completa.
+    CRITICITAT ABSOLUTA:
+    Aquesta informació determinarà si una proposta és ADEQUADA o INADEQUADA per al lote. Sigues IMPLACABLEMENT específic per poder detectar:
+    - Propostes genèriques sense relació amb el lote
+    - Propostes per altres lotes
+    - Propostes que no cobreixen criteris obligatoris
+    - Propostes superficials sense profunditat tècnica
+
+    IMPORTANT: Respon SEMPRE en català amb màxima precisió i especificitat.
   `;
 
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.2,
+			temperature: 0.05,
 		};
 
 		const contents = [
@@ -134,7 +158,7 @@ async function evaluateProposalWithCompanyExtraction(
 	const specsContent = specifications
 		.map(
 			(spec) => `
-    === ESPECIFICACIÓ: ${spec.name} ===
+    === ESPECIFICACIÓ COMPLETA: ${spec.name} ===
     ${spec.content}
   `,
 		)
@@ -142,86 +166,127 @@ async function evaluateProposalWithCompanyExtraction(
 
 	const criteriaContext = enhancedCriteria
 		.map(
-			(criterion) => `
-    CRITERI: ${criterion.name}
-    DESCRIPCIÓ: ${criterion.description}
-    REQUISITS: ${criterion.requirements}
-    CONTEXT: ${criterion.context}
+			(criterion, index) => `
+    CRITERI ${index + 1}: ${criterion.name}
+    DESCRIPCIÓ COMPLETA: ${criterion.description}
+    REQUISITS OBLIGATORIS: ${criterion.requirements}
+    CONTEXT I DETECCIÓ: ${criterion.context}
+    
+    REGLA ABSOLUTA PER AQUEST CRITERI:
+    - Si la proposta NO menciona ESPECÍFICAMENT aquest criteri → AUTOMÀTICAMENT "INSUFICIENT"
+    - Si la proposta menciona però NO desenvolupa adequadament → AUTOMÀTICAMENT "INSUFICIENT"
+    - Si la proposta desenvolupa superficialment sense profunditat → AUTOMÀTICAMENT "INSUFICIENT"
+    - Només si compleix TOTS els requisits amb profunditat → "REGULAR" o superior
   `,
 		)
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert tècnic en avaluació de licitacions amb criteris d'avaluació EXTREMADAMENT RIGOROSOS.
+    Ets un avaluador EXTREMADAMENT RIGORÓS de licitacions amb criteris ABSOLUTAMENT IMPLACABLES. La teva tasca és detectar i descartar propostes inadequades.
 
-    TASCA DUAL:
-    1. EXTREU amb precisió el nom de l'empresa que presenta la proposta
-    2. AVALUA amb MÀXIMA ESTRICTESA cada criteri per aquesta proposta
+    METODOLOGIA D'AVALUACIÓ EN DUES FASES OBLIGATÒRIES:
 
-    ESPECIFICACIONS:
+    === FASE 1: ANÀLISI PRÈVIA DE COHERÈNCIA (OBLIGATÒRIA) ===
+    
+    ABANS de qualsevol avaluació, determina si aquesta proposta és COHERENT amb aquest lote específic:
+    
+    1. VERIFICA COHERÈNCIA TEMÀTICA:
+       - La proposta parla dels mateixos serveis/productes que el lote?
+       - Menciona elements específics descrits al lote?
+       - L'enfoc proposat té relació directa amb els objectius del lote?
+    
+    2. VERIFICA ESPECIFICITAT:
+       - La proposta és específica per aquest lote o és genèrica?
+       - Fa referència a aspectes concrets del plec de condicions?
+       - Proposa deliverables coherents amb els requeriments?
+    
+    3. DECISIÓ DE COHERÈNCIA:
+       - Si la proposta NO és coherent amb el lote → ATURAR AVALUACIÓ → TOTS els criteris "INSUFICIENT"
+       - Si la proposta sembla per un altre lote → ATURAR AVALUACIÓ → TOTS els criteris "INSUFICIENT"  
+       - Si la proposta és massa genèrica → ATURAR AVALUACIÓ → TOTS els criteris "INSUFICIENT"
+       - Només si la proposta és COHERENT i ESPECÍFICA → CONTINUAR a Fase 2
+
+    === FASE 2: AVALUACIÓ CRITERI PER CRITERI (NOMÉS SI PASSA FASE 1) ===
+
+    ESPECIFICACIONS COMPLETES DEL LOTE:
     ${specsContent}
 
-    PROPOSTA PER AVALUAR:
-    Document: ${proposalName}
-    Contingut: ${proposalContent}
-
-    LOTE:
+    INFORMACIÓ DEL LOTE A AVALUAR:
     - Número: ${lot.lotNumber}
     - Títol: ${lot.title}
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
-    CRITERIS A AVALUAR:
+    PROPOSTA SOTA EXAMEN:
+    Document: ${proposalName}
+    Contingut: ${proposalContent}
+
+    CRITERIS D'AVALUACIÓ ESPECÍFICS:
     ${criteriaContext}
 
     INSTRUCCIONS D'EXTRACCIÓ D'EMPRESA:
-    1. Busca la raó social completa de l'empresa
-    2. Identifica denominacions oficials amb forma jurídica (S.L., S.A., etc.)
-    3. PRIORITAT: Declaracions explícites, signatures, capçaleres oficials
-    4. Si NO trobes empresa específica → "Empresa no identificada"
-    5. Avalua confiança: ALTA (0.8-1.0), MITJANA (0.5-0.7), BAIXA (0.2-0.4)
+    1. Localitza la raó social EXACTA de l'empresa
+    2. Busca formes jurídiques oficials (S.L., S.A., S.L.U., etc.)
+    3. PRIORITAT: signatures, capçaleres, declaracions explícites
+    4. Si NO identifiques empresa → "Empresa no identificada"
+    5. Confiança: ALTA (0.8-1.0), MITJANA (0.5-0.7), BAIXA (0.2-0.4)
 
-    INSTRUCCIONS D'AVALUACIÓ ULTRA-ESTRICTA:
-    Per cada criteri:
-    1. CERCA EXHAUSTIVA: Busca específicament aspectes relacionats amb el criteri
-    2. REGLA ESTRICTA: Si NO tracta el criteri → AUTOMÀTICAMENT "INSUFICIENT"
-    3. PUNTUACIONS:
-       - INSUFICIENT: No tracta el criteri O tracta inadequadament
-       - REGULAR: Tracta acceptablement però sense destacar
-       - COMPLEIX_EXITOSAMENT: Excel·lència excepcional, expertesa superior
+    REGLES D'AVALUACIÓ ABSOLUTAMENT INFEXIBLES:
 
-    IDIOMA: Català (SEMPRE)
+    PER CADA CRITERI INDIVIDUAL:
+    1. BUSCA ESPECÍFICAMENT elements del criteri a la proposta
+    2. SI NO TROBA MENCIÓ ESPECÍFICA → AUTOMÀTICAMENT "INSUFICIENT"
+    3. SI TROBA MENCIÓ PERÒ SENSE DESENVOLUPAMENT → AUTOMÀTICAMENT "INSUFICIENT"  
+    4. SI TROBA DESENVOLUPAMENT SUPERFICIAL → AUTOMÀTICAMENT "INSUFICIENT"
+    5. SI TROBA DESENVOLUPAMENT ACCEPTABLE → MÀXIM "REGULAR"
+    6. SI TROBA EXCEL·LÈNCIA EXCEPCIONAL → "COMPLEIX_EXITOSAMENT"
+
+    CRITERIS PUNTUACIÓ IMPLACABLES:
+    - INSUFICIENT: No menciona, tracta superficialment, genèricament o inadequadament el criteri
+    - REGULAR: Tracta el criteri amb profunditat acceptable i específica per al lote
+    - COMPLEIX_EXITOSAMENT: Expertesa excepcional, innovació i especificitat màxima per al criteri
+
+    SI EN QUALSEVOL MOMENT detectes que:
+    - La proposta no correspon a aquest lote específic
+    - És massa genèrica o estàndard
+    - No cobreix elements essencials del lote
+    - Sembla ser per un altre lote o servei
+    → ATURAR IMMEDIATAMENT → TOTS els criteris "INSUFICIENT"
 
     FORMAT DE RESPOSTA (JSON):
     {
-      "companyName": "Nom complet de l'empresa o 'Empresa no identificada'",
+      "companyName": "Nom complet exacte de l'empresa o 'Empresa no identificada'",
       "companyConfidence": 0.85,
-      "companyReasoning": "Explicació de com s'ha identificat l'empresa",
+      "companyReasoning": "Explicació detallada de la identificació",
       "criteria": [
         {
-          "criterion": "Nom del criteri",
+          "criterion": "Nom exacte del criteri",
           "score": "INSUFICIENT|REGULAR|COMPLEIX_EXITOSAMENT",
-          "justification": "Explicació detallada de l'avaluació",
-          "strengths": ["Punt fort 1", "Punt fort 2"],
-          "improvements": ["Millora 1", "Millora 2"],
-          "references": ["Referència 1", "Referència 2"]
+          "justification": "Explicació DETALLADA de per què aquesta puntuació: si menciona el criteri, com el desenvolupa, si compleix els requisits específics per aquest lote, i per què mereix aquesta puntuació",
+          "strengths": ["Punt fort específic 1", "Punt fort específic 2"],
+          "improvements": ["Millora concreta 1", "Millora concreta 2"],
+          "references": ["Referència específica del text 1", "Referència específica 2"]
         }
       ],
-      "summary": "Resum del rendiment global de la proposta",
-      "recommendation": "Anàlisi i recomanacions específiques",
+      "summary": "PRIMER indica si la proposta és coherent amb el lote, després resum crític del rendiment: quants criteris cobreix adequadament vs quants són insuficients",
+      "recommendation": "Recomanació IMPLACABLE: si la proposta és adequada per aquest lote específic, quins són els seus problemes greus, i si hauria de ser acceptada o rebutjada",
       "confidence": 0.85
     }
 
-    REGLES INFLEXIBLES:
-    - Si NO trobes tractament específic d'un criteri → SEMPRE "INSUFICIENT"
-    - NO inventis noms d'empresa si no els trobes explícitament
-    - Sigues IMPLACABLE en la verificació d'existència dels criteris
-    - Respon SEMPRE en català
+    REGLES ABSOLUTAMENT INNEGOCIABLES:
+    - Si proposta NO coherent amb lote → TOTS criteris "INSUFICIENT"
+    - Si criteri NO mencionat específicament → SEMPRE "INSUFICIENT"
+    - Si criteri mencionat però NO desenvolupat → SEMPRE "INSUFICIENT"
+    - NO siguis condescendent: sigues ABSOLUTAMENT IMPLACABLE
+    - Requereix EVIDÈNCIA ESPECÍFICA per cada criteri
+    - NO acceptis respostes genèriques o superficials
+    - Temperatura d'avaluació: MÀXIMA SEVERITAT
+    - Idioma: català SEMPRE
   `;
 
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.01,
+			temperature: 0.0001,
 		};
 
 		const contents = [
@@ -313,11 +378,12 @@ router.post('/', async (req, res, next) => {
 		}
 
 		logger.info(
-			`🚀 Starting evaluation for lot ${lotInfo.lotNumber}: ${lotInfo.title}`,
+			`🚀 Starting ultra-strict evaluation for lot ${lotInfo.lotNumber}: ${lotInfo.title}`,
 		);
 
-		// Step 1: Extract criteria for this lot (only once)
-		logger.info(`🔍 Extracting criteria for lot ${lotInfo.lotNumber}...`);
+		logger.info(
+			`🔍 Extracting ultra-detailed criteria for lot ${lotInfo.lotNumber}...`,
+		);
 		const enhancedCriteria = await extractLotCriteria(specifications, lotInfo);
 
 		if (enhancedCriteria.length === 0) {
@@ -325,15 +391,13 @@ router.post('/', async (req, res, next) => {
 		}
 
 		logger.info(
-			`📊 Found ${enhancedCriteria.length} criteria for lot ${lotInfo.lotNumber}`,
+			`📊 Found ${enhancedCriteria.length} ultra-detailed criteria for lot ${lotInfo.lotNumber}`,
 		);
 
-		// Step 2: Group proposals by name and evaluate each
 		const groupedProposals = groupProposalsByName(proposals);
 		const lotEvaluations: LotEvaluation[] = [];
 
 		if (groupedProposals.size === 0) {
-			// No proposals for this lot
 			lotEvaluations.push({
 				lotNumber: lotInfo.lotNumber,
 				lotTitle: lotInfo.title,
@@ -347,17 +411,15 @@ router.post('/', async (req, res, next) => {
 				confidence: 1.0,
 			});
 		} else {
-			// Evaluate each proposal group
 			for (const [proposalName, proposalFiles] of groupedProposals) {
 				logger.info(
-					`📋 Evaluating proposal "${proposalName}" for lot ${lotInfo.lotNumber}`,
+					`📋 Ultra-strict evaluation of proposal "${proposalName}" for lot ${lotInfo.lotNumber}`,
 				);
 
 				const proposalContent = proposalFiles
 					.map((p) => `=== ${p.name} ===\n${p.content}`)
 					.join('\n\n');
 
-				// Step 3: Evaluate proposal AND extract company in single AI call
 				const evaluation = await evaluateProposalWithCompanyExtraction(
 					enhancedCriteria,
 					lotInfo,
@@ -366,8 +428,11 @@ router.post('/', async (req, res, next) => {
 					proposalName,
 				);
 
+				const insufficientCount = evaluation.criteria.filter(
+					(c) => c.score === 'INSUFICIENT',
+				).length;
 				logger.info(
-					`🏢 Evaluation completed for "${proposalName}": Company "${evaluation.companyName}" (confidence: ${evaluation.companyConfidence.toFixed(2)})`,
+					`🏢 Ultra-strict evaluation completed for "${proposalName}": Company "${evaluation.companyName}" - ${insufficientCount}/${evaluation.criteria.length} insufficient criteria`,
 				);
 
 				lotEvaluations.push({
@@ -397,7 +462,7 @@ router.post('/', async (req, res, next) => {
 		};
 
 		logger.info(
-			`✅ Lot ${lotInfo.lotNumber} evaluation completed successfully`,
+			`✅ Lot ${lotInfo.lotNumber} ultra-strict evaluation completed successfully`,
 		);
 		res.json(result);
 	} catch (error) {
