@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 
 import uploadRoutes from './routes/upload';
 import extractLotsRoutes from './routes/extractLots';
-import evaluateLotsRoutes from './routes/evaluateLots';
+import evaluateLotRoutes from './routes/evaluateLot';
 import compareProposalsRoutes from './routes/compareProposals';
 import logger from './utils/logger';
 import { errorHandler, notFound } from './middleware/errorHandler';
@@ -57,9 +57,10 @@ app.get('/health', (req, res) => {
 	});
 });
 
+// Updated routes
 app.use('/api/upload', uploadRoutes);
 app.use('/api/extract-lots', extractLotsRoutes);
-app.use('/api/evaluate-lots', evaluateLotsRoutes);
+app.use('/api/evaluate-lot', evaluateLotRoutes);
 app.use('/api/compare-proposals', compareProposalsRoutes);
 
 app.use(notFound);

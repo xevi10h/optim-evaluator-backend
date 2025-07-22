@@ -33,12 +33,41 @@ export interface LotEvaluation {
 	confidence: number;
 }
 
+// New single lot evaluation types
+export interface SingleLotEvaluationRequest {
+	specifications: FileContent[];
+	proposals: FileContent[]; // Only proposals for this specific lot
+	lotInfo: LotInfo; // Single lot info instead of array
+}
+
+export interface SingleLotEvaluationResult {
+	lotNumber: number;
+	lotTitle: string;
+	evaluations: LotEvaluation[];
+	extractedCriteria: number;
+	processingTime: number;
+}
+
+// Updated evaluation result for frontend
 export interface EvaluationResult {
 	lots: LotEvaluation[];
 	extractedLots: LotInfo[];
 	overallSummary: string;
 	overallRecommendation: string;
 	overallConfidence: number;
+	// New fields for tracking progress
+	completedLots?: number;
+	totalLots?: number;
+	isComplete?: boolean;
+}
+
+// Progress tracking for frontend
+export interface EvaluationProgress {
+	currentLot: number;
+	totalLots: number;
+	currentLotTitle: string;
+	isEvaluating: boolean;
+	completedEvaluations: LotEvaluation[];
 }
 
 export interface CriterionComparison {
@@ -108,12 +137,6 @@ export interface UploadResponse {
 	};
 }
 
-export interface LotEvaluationRequest {
-	specifications: FileContent[];
-	proposals: FileContent[];
-	lots: LotInfo[];
-}
-
 export interface LotExtractionRequest {
 	specifications: FileContent[];
 }
@@ -176,4 +199,109 @@ export interface ValidationSchemas {
 	uploadSchema: any;
 	evaluationSchema: any;
 	criteriaExtractionSchema: any;
+}
+
+// Frontend specific types
+export interface FileWithContent {
+	file: File;
+	content: string;
+	name: string;
+}
+
+export interface ProcessingState {
+	isProcessing: boolean;
+	currentFile: string | null;
+	error: string | null;
+	progress: number;
+}
+
+export interface BasicInfo {
+	title: string;
+	expedient: string;
+	entity: string;
+	context: string;
+}
+
+export interface ProposalFile extends FileWithContent {
+	lotNumber: number;
+}
+
+export interface APIResponse<T> {
+	success: boolean;
+	data?: T;
+	error?: string;
+	details?: string;
+}
+
+export interface FileInfo {
+	name: string;
+	type: string;
+	size: number;
+	extension: string;
+	isSupported: boolean;
+}
+
+export interface PDFProcessingOptions {
+	maxPages?: number;
+	timeout?: number;
+	minTextLength?: number;
+}
+
+export interface ProcessingError {
+	code: string;
+	message: string;
+	isUserFriendly: boolean;
+	filename?: string;
+	step?: string;
+}
+
+export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.txt'] as const;
+
+export const MAX_FILE_SIZE = 10 * 1024 * 1024;
+export const MAX_CRITERIA = 8;
+export const MIN_JUSTIFICATION_LENGTH = 100;
+
+export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number];
+
+// Utility functions for company management
+export function getDisplayName(
+	companyName: string | null,
+	proposalName: string,
+): string {
+	if (companyName && companyName.trim().length > 0) {
+		return companyName;
+	}
+	return `${proposalName} (empresa no identificada)`;
+}
+
+export function getShortDisplayName(
+	companyName: string | null,
+	proposalName: string,
+): string {
+	if (companyName && companyName.trim().length > 0) {
+		return companyName.length > 30
+			? `${companyName.substring(0, 27)}...`
+			: companyName;
+	}
+
+	const shortName =
+		proposalName.length > 20
+			? `${proposalName.substring(0, 17)}...`
+			: proposalName;
+	return `${shortName} (no identificada)`;
+}
+
+export function hasCompanyInfo(evaluation: LotEvaluation): boolean {
+	return (
+		evaluation.companyName !== null && evaluation.companyName.trim().length > 0
+	);
+}
+
+export function getCompanyNameOrDefault(
+	companyName: string | null,
+	defaultText: string = 'Empresa no especificada',
+): string {
+	return companyName && companyName.trim().length > 0
+		? companyName
+		: defaultText;
 }
