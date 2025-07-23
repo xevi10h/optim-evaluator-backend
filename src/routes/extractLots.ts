@@ -26,74 +26,69 @@ async function extractLotsFromSpecifications(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert en anàlisi de licitacions públiques. Analitza els següents documents d'especificacions per identificar si hi ha múltiples lots i extreure'n la informació detallada.
+    Ets un expert en anàlisi de licitacions públiques. La teva tasca és determinar si aquesta licitació té múltiples LOTS ESPECÍFICS o només un lot únic.
 
     DOCUMENTS D'ESPECIFICACIONS:
     ${specsContent}
 
-    INSTRUCCIONS D'ANÀLISI DETALLADA:
+    REGLES FONAMENTALS PER A LA DETECCIÓ DE LOTS:
 
-    1. CERCA INDICADORS DE LOTS (per ordre de prioritat):
-       a) INDICADORS EXPLÍCITS:
-          - "Lot", "Lot", "Lots"
-          - "Grup", "Grupos"
-          - "Apartado", "Apartados", "Apartat", "Apartats"
-          - "Prestació", "Prestacions", "Prestación", "Prestaciones"
-          - "Paquet", "Paquets", "Paquete", "Paquetes"
-          - "Servei", "Serveis", "Servicio", "Servicios" (amb numeració)
-          
-       b) INDICADORS ESTRUCTURALS:
-          - Numeració clara amb títols (1., 2., A., B., I., II., etc.)
-          - Seccions amb pressupostos separats
-          - Divisions amb criteris d'avaluació diferenciats
-          - Parts amb possibilitat de licitació separada
+    1. INDICADORS OBLIGATORIS DE MÚLTIPLES LOTS:
+       - DIVISIÓ EXPLÍCITA amb paraules: "Lot", "Lote", "Lots", "Lotes"
+       - NUMERACIÓ CLARA de lots: "Lot 1", "Lot 2", "Lote A", "Lote B"
+       - PRESSUPOSTOS SEPARATS per cada lot clarament identificat
+       - POSSIBILITAT EXPLÍCITA de presentar ofertes per lots separats
+       - CRITERIS D'AVALUACIÓ DIFERENTS per cada lot específic
 
-    2. IDENTIFICA CADA LOT AMB PRECISIÓ:
-       - Número del lot (pot ser numèric, alfabètic o romà)
-       - Títol COMPLET i descriptiu del lot
-       - Descripció addicional si està disponible al text
-       - Àmbit d'aplicació específic
+    2. EL QUE NO SON LOTS (EXCLUSIONS CRÍTIQUES):
+       - Títols generals de la licitació o contracte
+       - Seccions, capítols o apartats que són parts del mateix lot
+       - Divisions administratives o organitzatives
+       - Fases temporals del mateix projecte
+       - Activitats diferents dins del mateix lot
+       - Prestacions complementàries del mateix lot
 
-    3. CRITERIS ESTRICTES PER DETERMINAR MÚLTIPLES LOTS:
-       - Si es menciona explícitament "lot", "lot" o similars
-       - Si hi ha divisions clares amb criteris d'avaluació SEPARATS
-       - Si hi ha pressupostos o imports DIFERENCIATS per cada part
-       - Si es menciona que es pot presentar proposta per "lots separats" o "parts diferenciades"
-       - Si hi ha terminis d'execució DIFERENTS per cada part
-       - Si es mencionen empreses DIFERENTS per cada servei
+    3. ANÀLISI ESTRICTA:
+       - Si trobes paraules com "Lot" seguides de numeració → ANALITZA si són realment lots independents
+       - Si NO trobes la paraula "Lot" o similar → És un lot únic SEMPRE
+       - Si trobes divisions però sense possibilitat de licitació separada → És un lot únic
+       - Si trobes "Lot únic" o "Un sol lot" → És un lot únic
 
-    4. EXTRACCIÓ DE TÍTOLS PRECISOS:
-       - Extreu el títol COMPLET tal com apareix al document
-       - Evita títols genèrics com "Serveis" - busca descriptions específiques
-       - Inclou l'àmbit geogràfic o temporal si està especificat
-       - Mantén la terminologia original del document
+    4. VALIDACIÓ FINAL:
+       - Cada lot identificat ha de tenir:
+         * Nom específic i descriptiu
+         * Possibilitat real de licitació independent
+         * Pressupost o valoració separada (si disponible)
+         * Criteris propis o diferenciats
 
-    5. RESPOSTA PREDETERMINADA CONSERVADORA:
-       - Si NO trobes evidència CLARA de múltiples lots, retorna un sol lot
-       - Si hi ha DUBTES sobre la divisió, inclina't cap a un sol lot
-       - La detecció de múltiples lots requereix evidència EXPLÍCITA
+    5. EXTRACCIÓ DE TÍTOLS:
+       - Extreu NOMÉS el nom específic de cada lot, NO el títol general de la licitació
+       - Els títols han de ser descriptius del contingut específic del lot
+       - Evita duplicar informació del títol general en cada lot
 
-    EXEMPLES DE LOTS BEN IDENTIFICATS:
-    - Lot 1: "Serveis de consultoria en transformació digital"
-    - Lot 2: "Desenvolupament i implementació de plataforma web"
-    - Lot A: "Manteniment d'infraestructures de la zona nord"
-    - Lot B: "Manteniment d'infraestructures de la zona sud"
+    CASOS D'ÚS:
+    - Si trobes "Licitació de serveis informàtics" amb "Lot 1: Desenvolupament web" i "Lot 2: Manteniment" → 2 lots
+    - Si trobes "Licitació de neteja" sense mencions de lots → 1 lot únic
+    - Si trobes "Contracte de consultoria" amb divisions però sense lots explícits → 1 lot únic
+    - Si trobes "Lot únic: Serveis de consultoria" → 1 lot únic
 
     FORMAT DE RESPOSTA (JSON estricte):
+    
+    Per MÚLTIPLES LOTS (només si hi ha evidència explícita):
     [
       {
         "lotNumber": 1,
-        "title": "Títol complet i específic del lot 1 tal com apareix al document",
-        "description": "Descripció opcional extreta del document si està disponible"
+        "title": "Nom específic del lot 1 (NO el títol general de la licitació)",
+        "description": "Descripció específica del lot si disponible"
       },
       {
         "lotNumber": 2,
-        "title": "Títol complet i específic del lot 2 tal com apareix al document", 
-        "description": "Descripció opcional extreta del document si està disponible"
+        "title": "Nom específic del lot 2 (NO el títol general de la licitació)",
+        "description": "Descripció específica del lot si disponible"
       }
     ]
 
-    Si només hi ha un lot o no trobes evidència CLARA de múltiples lots:
+    Per LOT ÚNIC (cas per defecte quan hi ha dubtes):
     [
       {
         "lotNumber": 1,
@@ -102,19 +97,15 @@ async function extractLotsFromSpecifications(
       }
     ]
 
-    NOTES IMPORTANTS:
-    - Sigues MOLT conservador: millor identificar un sol lot quan hi ha dubtes
-    - Els títols han de ser DESCRIPTIUS i ESPECÍFICS, no genèrics
-    - Extreu els títols EXACTAMENT com apareixen al document original
-    - Si identifiques lots, assegura't que cada un tingui un àmbit clar i diferenciat
-    
-    IMPORTANT: Respon en català i sigue conservador en la identificació.
+    PRINCIPI CONSERVADOR: En cas de dubte, retorna SEMPRE un lot únic. Només identifica múltiples lots quan hi hagi evidència EXPLÍCITA i CLARA.
+
+    IMPORTANT: Respon NOMÉS amb el JSON, sense explicacions addicionals.
   `;
 
 	try {
 		const config = {
 			responseMimeType: 'application/json',
-			temperature: 0.1,
+			temperature: 0.05,
 		};
 
 		const contents = [
@@ -124,7 +115,7 @@ async function extractLotsFromSpecifications(
 			},
 		];
 
-		logger.info('🔍 Extracting lots information with enhanced analysis...');
+		logger.info('🔍 Analyzing lots with improved detection logic...');
 
 		const response = await ai.models.generateContent({
 			model: 'gemini-2.0-flash-lite',
@@ -137,52 +128,64 @@ async function extractLotsFromSpecifications(
 		}
 
 		try {
-			const lots = JSON.parse(response.text);
+			const cleanedResponse = response.text
+				.replace(/```json\n?|\n?```/g, '')
+				.trim();
+			const lots = JSON.parse(cleanedResponse);
+
 			if (Array.isArray(lots) && lots.length > 0) {
-				const processedLots = lots.map((lot, index) => {
-					const lotNumber = lot.lotNumber || index + 1;
-					let title = lot.title || `Lot ${lotNumber}`;
+				const processedLots = lots
+					.map((lot, index) => {
+						const lotNumber = lot.lotNumber || index + 1;
+						let title = lot.title || `Lot ${lotNumber}`;
 
-					// Netejar títols massa genèrics
-					if (
-						title.length < 10 ||
-						/^(lot|lot|servei|servicio|prestació|prestación)\s*\d*$/i.test(
-							title.trim(),
-						)
-					) {
-						title = `Lot ${lotNumber}`;
-					}
+						title = title.trim();
 
-					return {
-						lotNumber,
-						title: title.trim(),
-						description: lot.description?.trim() || undefined,
-					};
-				});
+						if (title.length < 5) {
+							title = `Lot ${lotNumber}`;
+						}
+
+						if (isGenericLicitationTitle(title)) {
+							title = `Lot ${lotNumber}`;
+						}
+
+						return {
+							lotNumber,
+							title,
+							description: lot.description?.trim() || undefined,
+						};
+					})
+					.filter((lot, index, array) => {
+						if (array.length === 1) return true;
+
+						return !isDuplicateOrGeneric(lot, array, index);
+					});
+
+				if (processedLots.length <= 1) {
+					logger.info('📄 Analysis resulted in single lot');
+					return [
+						{
+							lotNumber: 1,
+							title: 'Lot Únic',
+							description:
+								"Licitació amb un sol lot segons l'anàlisi automàtica",
+						},
+					];
+				}
 
 				logger.info(
-					`✅ Successfully extracted ${processedLots.length} lot(s): ${processedLots.map((l) => l.title).join(', ')}`,
+					`✅ Successfully extracted ${processedLots.length} lots: ${processedLots.map((l) => l.title).join(', ')}`,
 				);
 
 				return processedLots;
 			}
 		} catch (parseError) {
 			logger.warn(
-				'Error parsing lots JSON, using fallback analysis:',
+				'Error parsing lots JSON, defaulting to single lot:',
 				parseError,
 			);
-
-			// Fallback: intentar extreure lots del text directament
-			const fallbackLots = extractLotsFromText(response.text);
-			if (fallbackLots.length > 0) {
-				logger.info(
-					`📝 Fallback extraction found ${fallbackLots.length} lot(s)`,
-				);
-				return fallbackLots;
-			}
 		}
 
-		// Fallback final a un sol lot
 		logger.info('📄 No multiple lots detected, defaulting to single lot');
 		return [
 			{
@@ -193,7 +196,6 @@ async function extractLotsFromSpecifications(
 		];
 	} catch (error) {
 		logger.error('Error extracting lots:', error);
-		// Fallback a un sol lot en cas d'error
 		return [
 			{
 				lotNumber: 1,
@@ -204,43 +206,54 @@ async function extractLotsFromSpecifications(
 	}
 }
 
-function extractLotsFromText(text: string): LotInfo[] {
-	const lots: LotInfo[] = [];
-	const lines = text.split('\n');
-
-	// Buscar patrons de lots en el text
-	const lotPatterns = [
-		/lot\s*(\d+):?\s*(.+)/gi,
-		/lot\s*(\d+):?\s*(.+)/gi,
-		/(\d+)\.\s*(.+)/g,
-		/([a-z])\.\s*(.+)/gi,
+function isGenericLicitationTitle(title: string): boolean {
+	const genericPatterns = [
+		/^licitaci[oó]n?\s+de\s+/i,
+		/^contracte\s+de\s+/i,
+		/^servei[so]?\s+de\s+/i,
+		/^prestaci[oó]n?\s+de\s+/i,
+		/^subministrament\s+de\s+/i,
+		/^obra[es]?\s+de\s+/i,
+		/^procediment\s+/i,
+		/^expedient\s+/i,
+		/^plec\s+de\s+/i,
+		/^document\s+/i,
 	];
 
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (trimmed.length < 10 || trimmed.length > 100) continue;
+	return genericPatterns.some((pattern) => pattern.test(title));
+}
 
-		for (const pattern of lotPatterns) {
-			const match = trimmed.match(pattern);
-			if (match && match.length >= 3) {
-				const lotNumber = parseInt(match[1]) || lots.length + 1;
-				const title = match[2]?.trim();
+function isDuplicateOrGeneric(
+	lot: LotInfo,
+	allLots: LotInfo[],
+	currentIndex: number,
+): boolean {
+	const currentTitle = lot.title.toLowerCase().trim();
 
-				if (title && title.length > 5) {
-					lots.push({
-						lotNumber,
-						title: title.replace(/["""'']/g, '').trim(),
-						description: undefined,
-					});
-					break;
-				}
-			}
-		}
-
-		if (lots.length >= 5) break; // Màxim 5 lots per fallback
+	if (currentTitle === 'lot únic' && allLots.length > 1) {
+		return true;
 	}
 
-	return lots.slice(0, 5); // Limitar a 5 lots màxim
+	for (let i = 0; i < allLots.length; i++) {
+		if (i === currentIndex) continue;
+
+		const otherTitle = allLots[i].title.toLowerCase().trim();
+
+		if (currentTitle === otherTitle) {
+			return i < currentIndex;
+		}
+
+		if (
+			currentTitle.includes(otherTitle) ||
+			otherTitle.includes(currentTitle)
+		) {
+			if (currentTitle.length < otherTitle.length) {
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 router.post('/', async (req, res, next) => {
@@ -259,7 +272,7 @@ router.post('/', async (req, res, next) => {
 			throw new AppError('Specification documents are required', 400);
 		}
 
-		logger.info('🚀 Starting enhanced lots extraction...');
+		logger.info('🚀 Starting improved lots extraction...');
 
 		const extractedLots = await extractLotsFromSpecifications(specifications);
 
@@ -268,7 +281,6 @@ router.post('/', async (req, res, next) => {
 
 		logger.info(`✅ Extraction completed: ${lotsDescription} identified`);
 
-		// Log detallat dels lots extrets
 		extractedLots.forEach((lot, index) => {
 			logger.info(
 				`📋 Lot ${lot.lotNumber}: "${lot.title}"${lot.description ? ` - ${lot.description}` : ''}`,
