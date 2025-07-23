@@ -28,14 +28,13 @@ async function compareProposalsForLot(
 	const proposalEvaluations = evaluatedProposals.map((evaluacio) => {
 		// Millor formatació amb informació d'empresa més rica
 		const companyDisplay = evaluacio.companyName
-			? `EMPRESA: ${evaluacio.companyName} (confiança identificació: ${Math.round(evaluacio.companyConfidence * 100)}%)`
-			: `DOCUMENT: ${evaluacio.proposalName} (empresa no identificada - confiança: ${Math.round(evaluacio.companyConfidence * 100)}%)`;
+			? `EMPRESA: ${evaluacio.companyName}`
+			: `DOCUMENT: ${evaluacio.proposalName}`;
 
 		return `
     === PROPOSTA: ${companyDisplay} ===
     INFORMACIÓ D'EMPRESA:
     - Nom identificat: ${evaluacio.companyName || 'No identificat'}
-    - Confiança identificació: ${Math.round(evaluacio.companyConfidence * 100)}%
     - Document original: ${evaluacio.proposalName}
     
     AVALUACIÓ INDIVIDUAL:
@@ -53,7 +52,6 @@ async function compareProposalsForLot(
     
     RESUM: ${evaluacio.summary}
     RECOMANACIÓ: ${evaluacio.recommendation}
-    CONFIANÇA AVALUACIÓ: ${evaluacio.confidence}
   `;
 	});
 
@@ -61,9 +59,9 @@ async function compareProposalsForLot(
 	const companyIdentificationSummary = evaluatedProposals
 		.map((prop) => {
 			if (prop.companyName) {
-				return `- ${prop.companyName}: Empresa identificada amb ${Math.round(prop.companyConfidence * 100)}% de confiança`;
+				return `- ${prop.companyName}`;
 			} else {
-				return `- Document "${prop.proposalName}": Empresa no identificada (${Math.round(prop.companyConfidence * 100)}% confiança)`;
+				return `- Document "${prop.proposalName}"`;
 			}
 		})
 		.join('\n');
@@ -150,7 +148,6 @@ async function compareProposalsForLot(
         }
       ],
       "summary": "Resum executiu de la comparació amb recomanacions clares, mencionant les empreses quan sigui possible i notant quines no han estat identificades",
-      "confidence": 0.85
     }
 
     REGLES ESTRICTES:
@@ -201,7 +198,6 @@ async function compareProposalsForLot(
 			criteriaComparisons: comparison.criteriaComparisons,
 			globalRanking: comparison.globalRanking,
 			summary: comparison.summary,
-			confidence: comparison.confidence,
 		};
 	} catch (error) {
 		logger.error(
@@ -232,7 +228,6 @@ router.post('/', async (req, res, next) => {
 			evaluatedProposals: evaluatedProposals?.map((p) => ({
 				name: p.proposalName,
 				company: p.companyName,
-				companyConfidence: p.companyConfidence,
 				lotNumber: p.lotNumber,
 			})),
 		});

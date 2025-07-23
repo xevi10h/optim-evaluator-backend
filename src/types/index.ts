@@ -25,12 +25,10 @@ export interface LotEvaluation {
 	lotTitle: string;
 	proposalName: string;
 	companyName: string | null;
-	companyConfidence: number;
 	hasProposal: boolean;
 	criteria: EvaluationCriteria[];
 	summary: string;
 	recommendation: string;
-	confidence: number;
 }
 
 // New single lot evaluation types
@@ -54,8 +52,6 @@ export interface EvaluationResult {
 	extractedLots: LotInfo[];
 	overallSummary: string;
 	overallRecommendation: string;
-	overallConfidence: number;
-	// New fields for tracking progress
 	completedLots?: number;
 	totalLots?: number;
 	isComplete?: boolean;
@@ -104,7 +100,6 @@ export interface ProposalComparison {
 	criteriaComparisons: CriterionComparison[];
 	globalRanking: ComparisonRanking[];
 	summary: string;
-	confidence: number;
 }
 
 export interface ComparisonRequest {

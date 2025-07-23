@@ -26,16 +26,16 @@ async function extractLotsFromSpecifications(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert en anàlisi de licitacions públiques. Analitza els següents documents d'especificacions per identificar si hi ha múltiples lotes i extreure'n la informació detallada.
+    Ets un expert en anàlisi de licitacions públiques. Analitza els següents documents d'especificacions per identificar si hi ha múltiples lots i extreure'n la informació detallada.
 
     DOCUMENTS D'ESPECIFICACIONS:
     ${specsContent}
 
     INSTRUCCIONS D'ANÀLISI DETALLADA:
 
-    1. CERCA INDICADORS DE LOTES (per ordre de prioritat):
+    1. CERCA INDICADORS DE LOTS (per ordre de prioritat):
        a) INDICADORS EXPLÍCITS:
-          - "Lot", "Lote", "Lotes"
+          - "Lot", "Lot", "Lots"
           - "Grup", "Grupos"
           - "Apartado", "Apartados", "Apartat", "Apartats"
           - "Prestació", "Prestacions", "Prestación", "Prestaciones"
@@ -48,17 +48,17 @@ async function extractLotsFromSpecifications(
           - Divisions amb criteris d'avaluació diferenciats
           - Parts amb possibilitat de licitació separada
 
-    2. IDENTIFICA CADA LOTE AMB PRECISIÓ:
-       - Número del lote (pot ser numèric, alfabètic o romà)
-       - Títol COMPLET i descriptiu del lote
+    2. IDENTIFICA CADA LOT AMB PRECISIÓ:
+       - Número del lot (pot ser numèric, alfabètic o romà)
+       - Títol COMPLET i descriptiu del lot
        - Descripció addicional si està disponible al text
        - Àmbit d'aplicació específic
 
-    3. CRITERIS ESTRICTES PER DETERMINAR MÚLTIPLES LOTES:
-       - Si es menciona explícitament "lot", "lote" o similars
+    3. CRITERIS ESTRICTES PER DETERMINAR MÚLTIPLES LOTS:
+       - Si es menciona explícitament "lot", "lot" o similars
        - Si hi ha divisions clares amb criteris d'avaluació SEPARATS
        - Si hi ha pressupostos o imports DIFERENCIATS per cada part
-       - Si es menciona que es pot presentar proposta per "lotes separats" o "parts diferenciades"
+       - Si es menciona que es pot presentar proposta per "lots separats" o "parts diferenciades"
        - Si hi ha terminis d'execució DIFERENTS per cada part
        - Si es mencionen empreses DIFERENTS per cada servei
 
@@ -69,11 +69,11 @@ async function extractLotsFromSpecifications(
        - Mantén la terminologia original del document
 
     5. RESPOSTA PREDETERMINADA CONSERVADORA:
-       - Si NO trobes evidència CLARA de múltiples lotes, retorna un sol lote
-       - Si hi ha DUBTES sobre la divisió, inclina't cap a un sol lote
-       - La detecció de múltiples lotes requereix evidència EXPLÍCITA
+       - Si NO trobes evidència CLARA de múltiples lots, retorna un sol lot
+       - Si hi ha DUBTES sobre la divisió, inclina't cap a un sol lot
+       - La detecció de múltiples lots requereix evidència EXPLÍCITA
 
-    EXEMPLES DE LOTES BEN IDENTIFICATS:
+    EXEMPLES DE LOTS BEN IDENTIFICATS:
     - Lot 1: "Serveis de consultoria en transformació digital"
     - Lot 2: "Desenvolupament i implementació de plataforma web"
     - Lot A: "Manteniment d'infraestructures de la zona nord"
@@ -83,30 +83,30 @@ async function extractLotsFromSpecifications(
     [
       {
         "lotNumber": 1,
-        "title": "Títol complet i específic del lote 1 tal com apareix al document",
+        "title": "Títol complet i específic del lot 1 tal com apareix al document",
         "description": "Descripció opcional extreta del document si està disponible"
       },
       {
         "lotNumber": 2,
-        "title": "Títol complet i específic del lote 2 tal com apareix al document", 
+        "title": "Títol complet i específic del lot 2 tal com apareix al document", 
         "description": "Descripció opcional extreta del document si està disponible"
       }
     ]
 
-    Si només hi ha un lote o no trobes evidència CLARA de múltiples lotes:
+    Si només hi ha un lot o no trobes evidència CLARA de múltiples lots:
     [
       {
         "lotNumber": 1,
         "title": "Lot Únic",
-        "description": "Licitació amb un sol lote segons l'anàlisi del plec de condicions"
+        "description": "Licitació amb un sol lot segons l'anàlisi del plec de condicions"
       }
     ]
 
     NOTES IMPORTANTS:
-    - Sigues MOLT conservador: millor identificar un sol lote quan hi ha dubtes
+    - Sigues MOLT conservador: millor identificar un sol lot quan hi ha dubtes
     - Els títols han de ser DESCRIPTIUS i ESPECÍFICS, no genèrics
     - Extreu els títols EXACTAMENT com apareixen al document original
-    - Si identifiques lotes, assegura't que cada un tingui un àmbit clar i diferenciat
+    - Si identifiques lots, assegura't que cada un tingui un àmbit clar i diferenciat
     
     IMPORTANT: Respon en català i sigue conservador en la identificació.
   `;
@@ -146,7 +146,7 @@ async function extractLotsFromSpecifications(
 					// Netejar títols massa genèrics
 					if (
 						title.length < 10 ||
-						/^(lot|lote|servei|servicio|prestació|prestación)\s*\d*$/i.test(
+						/^(lot|lot|servei|servicio|prestació|prestación)\s*\d*$/i.test(
 							title.trim(),
 						)
 					) {
@@ -188,7 +188,7 @@ async function extractLotsFromSpecifications(
 			{
 				lotNumber: 1,
 				title: 'Lot Únic',
-				description: "Licitació amb un sol lote segons l'anàlisi automàtica",
+				description: "Licitació amb un sol lot segons l'anàlisi automàtica",
 			},
 		];
 	} catch (error) {
@@ -198,8 +198,7 @@ async function extractLotsFromSpecifications(
 			{
 				lotNumber: 1,
 				title: 'Lot Únic',
-				description:
-					"Licitació amb un sol lote (error en l'anàlisi automàtica)",
+				description: "Licitació amb un sol lot (error en l'anàlisi automàtica)",
 			},
 		];
 	}
@@ -212,7 +211,7 @@ function extractLotsFromText(text: string): LotInfo[] {
 	// Buscar patrons de lots en el text
 	const lotPatterns = [
 		/lot\s*(\d+):?\s*(.+)/gi,
-		/lote\s*(\d+):?\s*(.+)/gi,
+		/lot\s*(\d+):?\s*(.+)/gi,
 		/(\d+)\.\s*(.+)/g,
 		/([a-z])\.\s*(.+)/gi,
 	];

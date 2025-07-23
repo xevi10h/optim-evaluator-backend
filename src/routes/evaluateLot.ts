@@ -36,12 +36,10 @@ interface LotContext {
 
 interface ProposalEvaluationResult {
 	companyName: string;
-	companyConfidence: number;
 	companyReasoning: string;
 	criteria: EvaluationCriteria[];
 	summary: string;
 	recommendation: string;
-	confidence: number;
 }
 
 async function extractLotContextAndCriteria(
@@ -58,21 +56,21 @@ async function extractLotContextAndCriteria(
 		.join('\n\n');
 
 	const prompt = `
-    Ets un expert en anàlisi de licitacions públiques. Extreu PRIMER el context complet del lote "${lot.title}" (Lot ${lot.lotNumber}) i DESPRÉS els criteris específics d'avaluació.
+    Ets un expert en anàlisi de licitacions públiques. Extreu PRIMER el context complet del lot "${lot.title}" (Lot ${lot.lotNumber}) i DESPRÉS els criteris específics d'avaluació.
 
     DOCUMENTS D'ESPECIFICACIONS:
     ${specsContent}
 
-    INFORMACIÓ DEL LOTE:
+    INFORMACIÓ DEL LOT:
     - Número: ${lot.lotNumber}
     - Títol: ${lot.title}
     ${lot.description ? `- Descripció: ${lot.description}` : ''}
 
-    TASCA 1: EXTRACCIÓ DEL CONTEXT COMPLET DEL LOTE
+    TASCA 1: EXTRACCIÓ DEL CONTEXT COMPLET DEL LOT
 
-    Analitza tot el contingut relacionat amb aquest lote i proporciona:
-    1. RESUM EXTENSO del lote: què és, què ha de fer l'adjudicatari, àmbit d'actuació
-    2. OBJECTIUS PRINCIPALS: finalitats clau que ha d'assolir el lote
+    Analitza tot el contingut relacionat amb aquest lot i proporciona:
+    1. RESUM EXTENSO del lot: què és, què ha de fer l'adjudicatari, àmbit d'actuació
+    2. OBJECTIUS PRINCIPALS: finalitats clau que ha d'assolir el lot
     3. REQUERIMENTS CLAU: elements obligatoris que ha de contenir qualsevol proposta
     4. DELIVERABLES ESPERATS: què ha de lliurar l'adjudicatari
 
@@ -80,23 +78,23 @@ async function extractLotContextAndCriteria(
 
     Després d'entendre el context, extreu els criteris SUBJECTIUS d'avaluació amb:
     1. Nom específic del criteri
-    2. Descripció detallada dins del context del lote
+    2. Descripció detallada dins del context del lot
     3. Requisits per considerar que una proposta resol aquest criteri
     4. Context per determinar si s'està tractant adequadament
 
     CRITERIS DE QUALIFICACIÓ PER L'AVALUACIÓ POSTERIOR:
-    - INSUFICIENT: Quan NO s'aborda el criteri o la proposta no té relació amb el lote
-    - REGULAR: Quan s'intenta resoldre el criteri dins del context del lote (encara que millorable)
+    - INSUFICIENT: Quan NO s'aborda el criteri o la proposta no té relació amb el lot
+    - REGULAR: Quan s'intenta resoldre el criteri dins del context del lot (encara que millorable)
     - COMPLEIX_EXITOSAMENT: Quan es resol el criteri amb excel·lència i innovació
 
     FORMAT DE RESPOSTA (JSON estricte):
     {
       "context": {
-        "lotSummary": "Descripció extensa del que consisteix aquest lote, què ha de fer l'adjudicatari, àmbit d'actuació, metodologia esperada, i context general complet",
+        "lotSummary": "Descripció extensa del que consisteix aquest lot, què ha de fer l'adjudicatari, àmbit d'actuació, metodologia esperada, i context general complet",
         "mainObjectives": [
-          "Objectiu principal 1 del lote",
-          "Objectiu principal 2 del lote",
-          "Objectiu principal 3 del lote"
+          "Objectiu principal 1 del lot",
+          "Objectiu principal 2 del lot",
+          "Objectiu principal 3 del lot"
         ],
         "keyRequirements": [
           "Requeriment obligatori 1 que ha de complir qualsevol proposta",
@@ -112,14 +110,14 @@ async function extractLotContextAndCriteria(
       "criteria": [
         {
           "name": "Nom específic del criteri d'avaluació",
-          "description": "Descripció detallada del què avalua aquest criteri dins del context d'aquest lote específic",
+          "description": "Descripció detallada del què avalua aquest criteri dins del context d'aquest lot específic",
           "requirements": "Què ha de contenir una proposta per considerar que està tractant aquest criteri adequadament",
           "context": "Informació addicional per determinar si una proposta està abordant aquest criteri o l'està ignorant completament"
         }
       ]
     }
 
-    IMPORTANT: Màxim 8 criteris que cobreixin els aspectes més importants del lote. Respon en català.
+    IMPORTANT: Màxim 8 criteris que cobreixin els aspectes més importants del lot. Respon en català.
   `;
 
 	try {
@@ -181,7 +179,7 @@ async function evaluateProposalWithCompanyExtraction(
 	proposalName: string,
 ): Promise<ProposalEvaluationResult> {
 	const contextDescription = `
-    RESUM COMPLET DEL LOTE:
+    RESUM COMPLET DEL LOT:
     ${lotContext.lotSummary}
 
     OBJECTIUS PRINCIPALS:
@@ -208,7 +206,7 @@ async function evaluateProposalWithCompanyExtraction(
 	const prompt = `
     Ets un avaluador expert de licitacions amb criteris equilibrats però rigorosos.
 
-    CONTEXT COMPLET DEL LOTE "${lot.title}" (Lot ${lot.lotNumber}):
+    CONTEXT COMPLET DEL LOT "${lot.title}" (Lot ${lot.lotNumber}):
     ${contextDescription}
 
     PROPOSTA A AVALUAR:
@@ -221,15 +219,15 @@ async function evaluateProposalWithCompanyExtraction(
     METODOLOGIA D'AVALUACIÓ EN 3 PASSOS:
 
     PAS 1 - VERIFICACIÓ DE COHERÈNCIA GENERAL:
-    Determina si aquesta proposta està dirigida a aquest lote específic:
-    - Parla dels mateixos serveis/objectius que el lote?
-    - Fa referència a elements del context del lote?
+    Determina si aquesta proposta està dirigida a aquest lot específic:
+    - Parla dels mateixos serveis/objectius que el lot?
+    - Fa referència a elements del context del lot?
     - L'enfoc general és coherent amb els requeriments?
 
-    SI LA PROPOSTA NO ÉS COHERENT AMB EL LOTE:
+    SI LA PROPOSTA NO ÉS COHERENT AMB EL LOT:
     → TOTS els criteris "INSUFICIENT" (proposta inadequada)
 
-    SI LA PROPOSTA ÉS COHERENT AMB EL LOTE:
+    SI LA PROPOSTA ÉS COHERENT AMB EL LOT:
     → Continua amb l'avaluació criteri per criteri
 
     PAS 2 - EXTRACCIÓ DE L'EMPRESA:
@@ -270,7 +268,6 @@ async function evaluateProposalWithCompanyExtraction(
     FORMAT DE RESPOSTA (JSON):
     {
       "companyName": "Nom exacte de l'empresa o 'Empresa no identificada'",
-      "companyConfidence": 0.85,
       "companyReasoning": "Explicació de la identificació",
       "criteria": [
         {
@@ -282,9 +279,8 @@ async function evaluateProposalWithCompanyExtraction(
           "references": ["Referència del text 1", "Referència 2"]
         }
       ],
-      "summary": "Resum precís: coherència general amb el lote i quants criteris es tracten EXPLÍCITAMENT vs quants no s'aborden adequadament",
-      "recommendation": "Recomanació basada en l'explicitesa: si la proposta tracta explícitament els criteris requerits i com compleix amb els requeriments del lote",
-      "confidence": 0.85
+      "summary": "Resum precís: coherència general amb el lot i quants criteris es tracten EXPLÍCITAMENT vs quants no s'aborden adequadament",
+      "recommendation": "Recomanació basada en l'explicitesa: si la proposta tracta explícitament els criteris requerits i com compleix amb els requeriments del lot",
     }
 
     PRINCIPIS FONAMENTALS:
@@ -328,16 +324,11 @@ async function evaluateProposalWithCompanyExtraction(
 
 		return {
 			companyName: evaluation.companyName || 'Empresa no identificada',
-			companyConfidence: Math.max(
-				0,
-				Math.min(1, evaluation.companyConfidence || 0),
-			),
 			companyReasoning:
 				evaluation.companyReasoning || "No s'ha proporcionat raonament",
 			criteria: evaluation.criteria || [],
 			summary: evaluation.summary || 'Resum no disponible',
 			recommendation: evaluation.recommendation || 'Recomanació no disponible',
-			confidence: Math.max(0, Math.min(1, evaluation.confidence || 0.5)),
 		};
 	} catch (error) {
 		logger.error(
@@ -420,12 +411,10 @@ router.post('/', async (req, res, next) => {
 				lotTitle: lotInfo.title,
 				proposalName: '',
 				companyName: null,
-				companyConfidence: 0,
 				hasProposal: false,
 				criteria: [],
-				summary: `No s'ha presentat proposta per al lote ${lotInfo.lotNumber}`,
-				recommendation: `Aquest lote no ha rebut cap proposta. Cal considerar relicitar aquest lote específic.`,
-				confidence: 1.0,
+				summary: `No s'ha presentat proposta per al lot ${lotInfo.lotNumber}`,
+				recommendation: `Aquest lot no ha rebut cap proposta. Cal considerar relicitar aquest lot específic.`,
 			});
 		} else {
 			for (const [proposalName, proposalFiles] of groupedProposals) {
@@ -468,12 +457,10 @@ router.post('/', async (req, res, next) => {
 						evaluation.companyName === 'Empresa no identificada'
 							? null
 							: evaluation.companyName,
-					companyConfidence: evaluation.companyConfidence,
 					hasProposal: true,
 					criteria: evaluation.criteria,
 					summary: evaluation.summary,
 					recommendation: evaluation.recommendation,
-					confidence: evaluation.confidence,
 				});
 			}
 		}

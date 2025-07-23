@@ -2,7 +2,6 @@ import logger from './logger';
 
 export interface CompanyExtractionResult {
 	companyName: string | null;
-	confidence: number;
 	source: string;
 }
 
@@ -31,7 +30,6 @@ export async function extractCompanyFromProposal(
 
 		const candidates: Array<{
 			name: string;
-			confidence: number;
 			source: string;
 		}> = [];
 
@@ -43,12 +41,9 @@ export async function extractCompanyFromProposal(
 				if (candidateName && isValidCompanyName(candidateName)) {
 					const cleanName = cleanCompanyName(candidateName);
 
-					// Confiança basada en l'ordre del patró (més baixa que la IA)
-					let confidence = 0.6 - index * 0.1; // Màxim 0.6 per fallback
-
 					candidates.push({
 						name: cleanName,
-						confidence: Math.max(0.2, confidence),
+
 						source: `Fallback pattern ${index + 1}`,
 					});
 				}
@@ -60,7 +55,7 @@ export async function extractCompanyFromProposal(
 		if (fileNameCompany) {
 			candidates.push({
 				name: fileNameCompany,
-				confidence: 0.3, // Confiança baixa per nom de fitxer
+
 				source: `Fallback filename: ${proposalName}`,
 			});
 		}
@@ -69,32 +64,26 @@ export async function extractCompanyFromProposal(
 			logger.info(`❌ Fallback extraction failed for "${proposalName}"`);
 			return {
 				companyName: null,
-				confidence: 0,
+
 				source: 'No fallback patterns found',
 			};
 		}
 
-		// Ordenar per confiança
-		candidates.sort((a, b) => b.confidence - a.confidence);
 		const bestCandidate = candidates[0];
 
-		// Penalitzar lleugerament per ser fallback
-		bestCandidate.confidence = Math.max(0.1, bestCandidate.confidence * 0.8);
-
 		logger.info(
-			`⚠️ Fallback extraction for "${proposalName}": ${bestCandidate.name} (confidence: ${bestCandidate.confidence.toFixed(2)})`,
+			`⚠️ Fallback extraction for "${proposalName}": ${bestCandidate.name} `,
 		);
 
 		return {
 			companyName: bestCandidate.name,
-			confidence: bestCandidate.confidence,
+
 			source: bestCandidate.source,
 		};
 	} catch (error) {
 		logger.error('Error in fallback company extraction:', error);
 		return {
 			companyName: null,
-			confidence: 0,
 			source: 'Error in fallback extraction',
 		};
 	}
